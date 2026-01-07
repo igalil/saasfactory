@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git ls-tree:*)",
+      "Bash(tree:*)",
+      "Bash(git config:*)",
+      "WebSearch",
+      "Bash(npm install:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run build:*)",
+      "Bash(node dist/index.js:*)",
+      "Bash(npm test:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(claude:*)",
+      "Bash(timeout 60 node:*)",
+      "Bash(npx tsx:*)",
+      "Bash(DEBUG_STREAM=1 npx tsx:*)",
+      "Bash(script -q /dev/null sh -c 'claude -p \"\"search for flight tracking SaaS\"\" --output-format stream-json --verbose --allowedTools WebSearch --max-turns 2')",
+      "Bash(find:*)",
+      "Bash(timeout 30 claude:*)",
+      "Bash(node /tmp/test-stream.mjs:*)",
+      "Bash(node /tmp/test-stream2.mjs:*)",
+      "Bash(node /tmp/test-stream3.mjs:*)",
+      "Bash(node /tmp/test-stream4.mjs:*)",
+      "Bash(gh auth:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git rm:*)"
+    ]
+  }
+}
