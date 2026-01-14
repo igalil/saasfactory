@@ -26,7 +26,26 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e:*)",
+      "Bash(node:*)",
+      "Bash(timeout 90 claude -p 'Refine this SaaS idea into 2-3 clear, professional versions:\n\nUser''''s raw input:\n\"\"i want to make website where it list the top 50 actors of all the time\"\"\n\nReturn ONLY valid JSON matching this structure \\(no markdown\\):\n{\n  \"\"versions\"\": [\n    {\n      \"\"summary\"\": \"\"A concise description\"\",\n      \"\"keyFeatures\"\": [\"\"Feature 1\"\"],\n      \"\"targetAudience\"\": \"\"Who this is for\"\",\n      \"\"uniqueAngle\"\": \"\"What makes this different\"\"\n    }\n  ]\n}' --output-format json)",
+      "Bash(grep:*)",
+      "Bash(DEBUG_REFINE=1 node dist/index.js:*)",
+      "Bash(npm link)",
+      "Bash(npm ls:*)",
+      "Bash(bun install:*)",
+      "Bash(curl:*)",
+      "Bash(bash)",
+      "Bash(~/.bun/bin/bun install:*)",
+      "Bash(~/.bun/bin/bun run build:*)",
+      "Bash(~/.bun/bin/bun link:*)",
+      "Bash(~/.bun/bin/bun x saasfactory:*)",
+      "Bash(~/.bun/bin/bunx:*)",
+      "Bash(~/.bun/bin/bun:*)",
+      "Bash(bun run build:*)",
+      "Bash(npx tsup:*)"
     ]
   }
 }

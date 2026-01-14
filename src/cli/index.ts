@@ -3,17 +3,23 @@ import { ui } from './ui.js';
 import {
   promptName,
   promptDescription,
-  promptFeatures,
   promptBranding,
   promptConfirm,
   promptApiKeys,
+  promptIdeaMode,
+  promptSectorFocus,
+  promptRoughIdea,
+  promptIdeaSelection,
+  promptIdeaConfirmation,
+  promptIdeaRefinement,
+  promptProjectLocation,
+  promptProjectConfig,
   GO_BACK_SECTION,
   setupSignalHandlers,
+  type IdeaMode,
+  type ProjectConfigAnswers,
 } from './prompts.js';
-import {
-  createDefaultContext,
-  mapSelectedFeatures,
-} from '../core/context.js';
+import { createDefaultContext } from '../core/context.js';
 import {
   loadCredentials,
   saveCredentials,
@@ -21,7 +27,13 @@ import {
 } from '../core/config.js';
 import { claudeGenerate, isClaudeCodeAvailable } from '../ai/claude-cli.js';
 import { conductMarketResearch } from '../ai/market-research.js';
+import { competeResearch, type CompeteProgressCallback } from '../ai/compete-research.js';
 import { displayResearchSummary, generateResearchReport } from '../ai/research-report.js';
+import { discoverSaasIdeas, type DiscoveryProgressEvent } from '../ai/idea-discovery.js';
+import { displayIdeasList, displayIdeaDetails, displayDiscoverySummary } from '../ai/idea-report.js';
+import { refineIdea, suggestProjectNames } from '../ai/idea-refiner.js';
+import { analyzeProject, type ProjectAnalysis } from '../ai/project-analyzer.js';
+import type { SaasIdea } from '../core/context.js';
 import { generate } from '../core/generator.js';
 import path from 'path';
 import { checkDomainAvailability, suggestDomains } from '../integrations/domain.js';
@@ -70,43 +82,384 @@ program
     }
 
     // Granular state machine with back navigation at every step
-    // States: name → description → research_confirm → research → features → branding → ai_content → summary → generate
-    type WizardState = 'name' | 'description' | 'research_confirm' | 'research' | 'features' | 'branding' | 'ai_content' | 'summary' | 'generate';
+    // States: idea_mode → [discovery_sector → discovery_research → discovery_results → discovery_select] → name → description → idea_refinement → research_confirm → research → features → branding → ai_content → summary → generate
+    type WizardState =
+      | 'idea_mode'
+      | 'discovery_sector'
+      | 'discovery_rough_idea'
+      | 'discovery_research'
+      | 'discovery_results'
+      | 'discovery_select'
+      | 'discovery_confirm'
+      | 'name'
+      | 'description'
+      | 'idea_refinement'
+      | 'name_research'  // Search competitors + suggest names (after user picks description)
+      | 'project_config' // AI-driven project configuration (replaces features)
+      | 'branding'
+      | 'ai_content'
+      | 'summary'
+      | 'project_location'
+      | 'generate';
 
-    // Determine starting state based on CLI args
-    let wizardState: WizardState = name ? 'description' : 'name';
+    // Determine starting state based on CLI args and Claude availability
+    // If name is provided, skip to description; otherwise start with idea_mode (if Claude available)
+    let wizardState: WizardState = name ? 'description' : (claudeAvailable ? 'idea_mode' : 'name');
     let aiContentGenerated = false;
 
     // Wizard data
     let projectName = name || '';
     let description = '';
     let context = createDefaultContext('temp', '');
-    let featureAnswers: Awaited<ReturnType<typeof promptFeatures>> | null = null;
     let brandingAnswers: Awaited<ReturnType<typeof promptBranding>> | null = null;
     const showResearch = claudeAvailable && !options?.skipResearch;
 
+    // Discovery data
+    let ideaMode: IdeaMode = 'has_idea';
+    let discoverySector: string | null = null;
+    let roughIdea: string | null = null;
+    let discoveredIdeas: SaasIdea[] = [];
+    let selectedIdea: SaasIdea | null = null;
+
+    // Project location
+    let projectPath: string | null = null;
+
+    // Refinement data (from idea refinement with competitor search)
+    let suggestedNames: string[] = [];
+    let foundCompetitors: { name: string; description: string }[] = [];
+
+    // Project analysis (AI-driven configuration)
+    let projectAnalysis: ProjectAnalysis | null = null;
+    let projectConfig: ProjectConfigAnswers | null = null;
+
     while (wizardState !== 'generate') {
       // ─────────────────────────────────────────────────────────────
-      // STATE: name
+      // STATE: idea_mode - Ask if user has an idea
       // ─────────────────────────────────────────────────────────────
-      if (wizardState === 'name') {
-        projectName = await promptName(projectName);
-        wizardState = 'description';
+      if (wizardState === 'idea_mode') {
+        ui.heading('SaaS Idea');
+        ui.info('Let\'s start by understanding your idea.');
+        ui.log('');
+
+        const mode = await promptIdeaMode();
+
+        if (mode === GO_BACK_SECTION) {
+          // Can't go back from first state
+          continue;
+        }
+
+        ideaMode = mode;
+
+        if (ideaMode === 'has_idea') {
+          wizardState = 'description'; // Description first, then refinement, then name
+        } else if (ideaMode === 'discover') {
+          wizardState = 'discovery_sector';
+        } else if (ideaMode === 'validate') {
+          wizardState = 'discovery_rough_idea';
+        }
 
       // ─────────────────────────────────────────────────────────────
-      // STATE: description
+      // STATE: discovery_rough_idea - Get rough idea to validate
+      // ─────────────────────────────────────────────────────────────
+      } else if (wizardState === 'discovery_rough_idea') {
+        const result = await promptRoughIdea(true);
+
+        if (result === GO_BACK_SECTION) {
+          wizardState = 'idea_mode';
+          continue;
+        }
+
+        roughIdea = result;
+        wizardState = 'discovery_sector';
+
+      // ─────────────────────────────────────────────────────────────
+      // STATE: discovery_sector - Optional sector focus
+      // ─────────────────────────────────────────────────────────────
+      } else if (wizardState === 'discovery_sector') {
+        const result = await promptSectorFocus(true);
+
+        if (result === GO_BACK_SECTION) {
+          if (ideaMode === 'validate') {
+            wizardState = 'discovery_rough_idea';
+          } else {
+            wizardState = 'idea_mode';
+          }
+          continue;
+        }
+
+        discoverySector = result;
+        wizardState = 'discovery_research';
+
+      // ─────────────────────────────────────────────────────────────
+      // STATE: discovery_research - AI research phase
+      // ─────────────────────────────────────────────────────────────
+      } else if (wizardState === 'discovery_research') {
+        ui.heading('Idea Discovery');
+        if (roughIdea) {
+          ui.info(`Researching and refining your idea: "${roughIdea.slice(0, 50)}${roughIdea.length > 50 ? '...' : ''}"`);
+        } else {
+          ui.info('Searching for viable micro-SaaS opportunities...');
+        }
+        if (discoverySector) {
+          ui.info(`Focusing on: ${discoverySector}`);
+        }
+        ui.log('');
+        ui.info('This takes 5-8 minutes for thorough research.');
+        ui.log('');
+
+        let researchSpinner = ui.spinner('Starting idea discovery...');
+        let searchCount = 0;
+        let sourcesCount = 0;
+
+        const result = await discoverSaasIdeas({
+          sector: discoverySector || undefined,
+          roughIdea: roughIdea || undefined,
+          count: 5,
+          onProgress: (event: DiscoveryProgressEvent) => {
+            if (event.type === 'search') {
+              searchCount = event.searchCount ?? searchCount + 1;
+              const query = event.query
+                ? `"${event.query.length > 40 ? event.query.slice(0, 40) + '...' : event.query}"`
+                : `#${searchCount}`;
+              researchSpinner.text = `Searching: ${query}`;
+            } else if (event.type === 'sources' && event.sources) {
+              sourcesCount = event.totalSources ?? sourcesCount + event.sources.length;
+              researchSpinner.text = `Found ${sourcesCount} sources...`;
+            } else if (event.type === 'status') {
+              researchSpinner.text = event.message;
+            } else if (event.type === 'phase') {
+              const phaseMessages: Record<string, string> = {
+                gaps: 'Finding market gaps...',
+                competitors: 'Analyzing competitors...',
+                ideas: 'Synthesizing ideas...',
+                difficulty: 'Assessing implementation difficulty...',
+                marketing: 'Researching marketing channels...',
+              };
+              researchSpinner.text = phaseMessages[event.phase || ''] || event.message;
+            }
+          },
+        });
+
+        if (result.isFallback) {
+          researchSpinner.warn(`Discovery incomplete: ${result.error}`);
+          ui.log('');
+          ui.info('Using example ideas. You can research opportunities manually.');
+        } else {
+          researchSpinner.succeed(`Discovery complete! Found ${result.ideas.length} ideas (${searchCount} searches, ${sourcesCount} sources)`);
+        }
+
+        discoveredIdeas = result.ideas;
+        wizardState = 'discovery_results';
+
+      // ─────────────────────────────────────────────────────────────
+      // STATE: discovery_results - Display discovered ideas
+      // ─────────────────────────────────────────────────────────────
+      } else if (wizardState === 'discovery_results') {
+        displayIdeasList(discoveredIdeas);
+        wizardState = 'discovery_select';
+
+      // ─────────────────────────────────────────────────────────────
+      // STATE: discovery_select - User selects an idea
+      // ─────────────────────────────────────────────────────────────
+      } else if (wizardState === 'discovery_select') {
+        const selection = await promptIdeaSelection(discoveredIdeas, true);
+
+        if (selection === GO_BACK_SECTION) {
+          wizardState = 'discovery_sector';
+          continue;
+        }
+
+        if (selection === 'more') {
+          // Run discovery again
+          wizardState = 'discovery_research';
+          continue;
+        }
+
+        if (selection === 'sector') {
+          // Let user pick a different sector
+          wizardState = 'discovery_sector';
+          continue;
+        }
+
+        selectedIdea = selection;
+        wizardState = 'discovery_confirm';
+
+      // ─────────────────────────────────────────────────────────────
+      // STATE: discovery_confirm - Confirm selected idea
+      // ─────────────────────────────────────────────────────────────
+      } else if (wizardState === 'discovery_confirm') {
+        if (selectedIdea) {
+          displayIdeaDetails(selectedIdea);
+
+          const confirmed = await promptIdeaConfirmation(selectedIdea, true);
+
+          if (confirmed === GO_BACK_SECTION) {
+            wizardState = 'discovery_results';
+            continue;
+          }
+
+          if (!confirmed) {
+            wizardState = 'discovery_select';
+            continue;
+          }
+
+          // Pre-fill project data from selected idea
+          projectName = selectedIdea.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          description = selectedIdea.description;
+          context = createDefaultContext(projectName, description);
+          context.discoveredIdea = selectedIdea;
+
+          // Set SaaS type based on target audience (best guess)
+          const audienceLower = selectedIdea.targetAudience.join(' ').toLowerCase();
+          if (audienceLower.includes('business') || audienceLower.includes('team') || audienceLower.includes('enterprise')) {
+            context.saasType = 'b2b';
+          } else if (audienceLower.includes('developer') || audienceLower.includes('maker')) {
+            context.saasType = 'tool';
+          }
+
+          // Set pricing type based on income model
+          if (selectedIdea.income.model === 'subscription') {
+            context.pricing.type = 'subscription';
+          } else if (selectedIdea.income.model === 'freemium') {
+            context.pricing.type = 'freemium';
+          } else if (selectedIdea.income.model === 'one-time') {
+            context.pricing.type = 'one-time';
+          }
+
+          ui.success(`Selected: ${selectedIdea.name}`);
+          ui.log('');
+
+          // Skip name and description, go directly to project config
+          wizardState = 'project_config';
+        } else {
+          wizardState = 'discovery_select';
+        }
+
+      // ─────────────────────────────────────────────────────────────
+      // STATE: name - Now comes after description and refinement
+      // ─────────────────────────────────────────────────────────────
+      } else if (wizardState === 'name') {
+        ui.heading('Project Name');
+
+        // Show competitors if found during refinement
+        if (foundCompetitors.length > 0) {
+          ui.subheading('Competitors found:');
+          foundCompetitors.slice(0, 5).forEach(c => {
+            ui.log(`  ${c.name}: ${c.description}`);
+          });
+          ui.log('');
+        }
+
+        const result = await promptName(
+          suggestedNames.length > 0 ? suggestedNames : undefined,
+          true, // Can go back to refinement
+          projectName || undefined,
+        );
+
+        if (result === GO_BACK_SECTION) {
+          // Go back to refinement (will redo name_research too)
+          wizardState = 'idea_refinement';
+          suggestedNames = [];
+          foundCompetitors = [];
+          continue;
+        }
+
+        projectName = result;
+        context = createDefaultContext(projectName, description);
+
+        // Go to AI-driven project configuration
+        wizardState = 'project_config';
+
+      // ─────────────────────────────────────────────────────────────
+      // STATE: description - Now comes before name
       // ─────────────────────────────────────────────────────────────
       } else if (wizardState === 'description') {
+        ui.heading('Your Idea');
+
         const result = await promptDescription(true, description || undefined);
 
         if (result === GO_BACK_SECTION) {
-          wizardState = 'name';
+          wizardState = 'idea_mode';
           continue;
         }
 
         description = result;
-        context = createDefaultContext(projectName, description);
-        wizardState = showResearch ? 'research_confirm' : 'features';
+        // Go to idea refinement if Claude is available, otherwise go to name
+        wizardState = claudeAvailable ? 'idea_refinement' : 'name';
+
+      // ─────────────────────────────────────────────────────────────
+      // STATE: idea_refinement - Quick refinement (no web search)
+      // ─────────────────────────────────────────────────────────────
+      } else if (wizardState === 'idea_refinement') {
+        ui.heading('Idea Refinement');
+
+        const spinner = ui.spinner('Analyzing your idea...');
+
+        const result = await refineIdea(description);
+
+        if (!result.success) {
+          spinner.warn('Could not refine idea - continuing with original');
+          wizardState = claudeAvailable ? 'name_research' : 'name';
+          continue;
+        }
+
+        spinner.succeed('Generated refined versions');
+        ui.log('');
+
+        const selection = await promptIdeaRefinement(
+          result.versions,
+          description,
+          result.clarifyingQuestions,
+          true,
+        );
+
+        if (selection === GO_BACK_SECTION) {
+          wizardState = 'description';
+          continue;
+        }
+
+        // Update description based on selection
+        if (selection.type === 'selected') {
+          description = selection.idea.summary;
+          ui.success(`Selected version ${result.versions.indexOf(selection.idea) + 1}`);
+        } else if (selection.type === 'custom') {
+          description = selection.text;
+          ui.success('Using your custom version.');
+        } else {
+          ui.info('Using original description.');
+        }
+
+        ui.log('');
+        // Go to name research (competitor search + name suggestions)
+        wizardState = claudeAvailable ? 'name_research' : 'name';
+
+      // ─────────────────────────────────────────────────────────────
+      // STATE: name_research - Search competitors and suggest names
+      // ─────────────────────────────────────────────────────────────
+      } else if (wizardState === 'name_research') {
+        ui.heading('Finding Competitors & Suggesting Names');
+        ui.info('Searching for similar products and generating name ideas...');
+        ui.log('');
+
+        const spinner = ui.spinner('Researching market...');
+
+        const result = await suggestProjectNames(description);
+
+        if (!result.success) {
+          spinner.warn('Could not search competitors - continuing without suggestions');
+          suggestedNames = [];
+          foundCompetitors = [];
+        } else {
+          foundCompetitors = result.competitors || [];
+          suggestedNames = result.suggestedNames || [];
+
+          const competitorCount = foundCompetitors.length;
+          const nameCount = suggestedNames.length;
+          spinner.succeed(`Found ${competitorCount} competitors, generated ${nameCount} name suggestions`);
+        }
+
+        ui.log('');
+        wizardState = 'name';
 
       // ─────────────────────────────────────────────────────────────
       // STATE: research_confirm
@@ -209,22 +562,42 @@ program
         } else {
           researchSpinner.warn('Market research unavailable (Claude Code not found)');
         }
-        wizardState = 'features';
+        wizardState = 'project_config';
 
       // ─────────────────────────────────────────────────────────────
-      // STATE: features
+      // STATE: project_config - AI-driven project configuration
       // ─────────────────────────────────────────────────────────────
-      } else if (wizardState === 'features') {
-        ui.heading('Features');
-        const result = await promptFeatures(true);
+      } else if (wizardState === 'project_config') {
+        ui.heading('Project Configuration');
+
+        // Analyze the project if not already done
+        if (!projectAnalysis) {
+          ui.info('Analyzing your project to suggest relevant options...');
+          ui.log('');
+
+          const spinner = ui.spinner('Generating configuration options...');
+          projectAnalysis = await analyzeProject(description);
+
+          if (!projectAnalysis.success) {
+            spinner.warn('Could not analyze project - using defaults');
+          } else {
+            spinner.succeed(`Detected: ${projectAnalysis.projectType}`);
+          }
+          ui.log('');
+        }
+
+        const result = await promptProjectConfig(projectAnalysis!, true);
 
         if (result === GO_BACK_SECTION) {
-          // Go back to research_confirm if research is enabled, otherwise description
-          wizardState = showResearch ? 'research_confirm' : 'description';
+          wizardState = 'name';
           continue;
         }
 
-        featureAnswers = result;
+        projectConfig = result;
+
+        // Update context with project config
+        context.pricing.type = result.pricing as any;
+
         wizardState = 'branding';
 
       // ─────────────────────────────────────────────────────────────
@@ -235,21 +608,12 @@ program
         const result = await promptBranding(true);
 
         if (result === GO_BACK_SECTION) {
-          wizardState = 'features';
+          wizardState = 'project_config';
           continue;
         }
 
         brandingAnswers = result;
 
-        // Update context with features and branding before AI content generation
-        if (featureAnswers && featureAnswers !== GO_BACK_SECTION) {
-          context.saasType = featureAnswers.saasType;
-          context.pricing.type = featureAnswers.pricingType;
-          Object.assign(
-            context.features,
-            mapSelectedFeatures(featureAnswers.features, featureAnswers.analytics),
-          );
-        }
         if (brandingAnswers && brandingAnswers !== GO_BACK_SECTION) {
           context.domain = brandingAnswers.domain;
           if (brandingAnswers.tagline) {
@@ -321,16 +685,15 @@ Generate JSON with:
       } else if (wizardState === 'summary') {
         ui.heading('Project Summary');
         ui.keyValue('Name', context.displayName);
-        ui.keyValue('Type', context.saasType.toUpperCase());
+        ui.keyValue('Type', projectConfig?.projectType || 'Web Application');
         ui.keyValue('Pricing', context.pricing.type);
         ui.keyValue('Domain', context.domain ?? 'Not set');
         ui.log('');
 
-        ui.subheading('Enabled features:');
-        const enabledFeatures = Object.entries(context.features)
-          .filter(([, enabled]) => enabled === true || enabled !== 'none')
-          .map(([feature]) => feature);
-        ui.list(enabledFeatures);
+        if (projectConfig?.features && projectConfig.features.length > 0) {
+          ui.subheading('Selected features:');
+          ui.list(projectConfig.features);
+        }
 
         if (!options?.yes) {
           ui.log('');
@@ -350,13 +713,37 @@ Generate JSON with:
           }
         }
 
+        wizardState = 'project_location';
+
+      // ─────────────────────────────────────────────────────────────
+      // STATE: project_location - Ask where to create the project folder
+      // ─────────────────────────────────────────────────────────────
+      } else if (wizardState === 'project_location') {
+        ui.heading('Project Location');
+
+        // If --yes flag is set, use default path
+        if (options?.yes) {
+          projectPath = path.join(process.cwd(), projectName);
+          ui.info(`Creating project at: ${projectPath}`);
+          wizardState = 'generate';
+          continue;
+        }
+
+        const result = await promptProjectLocation(projectName, true);
+
+        if (result === GO_BACK_SECTION) {
+          wizardState = 'summary';
+          continue;
+        }
+
+        projectPath = result;
         wizardState = 'generate';
       }
     }
 
     // Generate project
     ui.heading('Generating Project');
-    const result = await generate(context);
+    const result = await generate(context, projectPath || undefined);
 
     if (!result.success) {
       ui.error('Project generation failed');
@@ -597,11 +984,174 @@ program
     }
   });
 
-// Default command (interactive)
+// Compete command - research competition
+program
+  .command('compete <input>')
+  .description('Research competitors for a SaaS idea or analyze a competitor URL')
+  .action(async (input: string) => {
+    setupSignalHandlers();
+    ui.banner();
+
+    // Check Claude Code availability
+    const claudeAvailable = await isClaudeCodeAvailable();
+    if (!claudeAvailable) {
+      ui.error('Claude Code CLI not found. This feature requires Claude Code.');
+      ui.info('Install Claude Code: https://claude.ai/code');
+      return;
+    }
+
+    // Detect input type
+    const isUrl = input.startsWith('http://') || input.startsWith('https://');
+
+    ui.heading('Competitive Research');
+    if (isUrl) {
+      ui.info(`Analyzing: ${input}`);
+      ui.info('Will fetch the website, understand the product, and find competitors.');
+    } else {
+      ui.info(`Researching: "${input}"`);
+      ui.info('Will search for competitors and analyze the market.');
+    }
+    ui.log('');
+    ui.info('This may take several minutes for thorough research.');
+    ui.log('');
+
+    let spinner = ui.spinner(isUrl ? 'Fetching and analyzing website...' : 'Starting competitor research...');
+    let searchCount = 0;
+    let sourcesCount = 0;
+
+    const result = await competeResearch(input, (event) => {
+      if (event.type === 'search') {
+        searchCount = event.count ?? searchCount + 1;
+        const query = event.query
+          ? `"${event.query.length > 40 ? event.query.slice(0, 40) + '...' : event.query}"`
+          : `#${searchCount}`;
+        spinner.text = `Searching: ${query}`;
+      } else if (event.type === 'sources' && event.sources) {
+        sourcesCount = event.totalSources ?? sourcesCount + event.sources.length;
+        spinner.text = `Found ${sourcesCount} sources...`;
+      } else if (event.type === 'status') {
+        spinner.text = event.message;
+      } else if (event.type === 'analyzing') {
+        spinner.text = event.message;
+      }
+    });
+
+    if (!result) {
+      spinner.fail('Competitive research failed - Claude Code unavailable');
+      return;
+    }
+
+    if (result.isFallback) {
+      spinner.warn(`Research incomplete: ${result.error}`);
+      ui.log('');
+      ui.info('Using placeholder data. You can research competitors manually.');
+    } else {
+      spinner.succeed(`Research complete! (${searchCount} searches, ${result.research.competitors.length} competitors found)`);
+    }
+
+    ui.log('');
+    displayResearchSummary(result.research);
+
+    // Ask to save report
+    const { confirm } = await import('@clack/prompts');
+    const saveReport = await confirm({
+      message: 'Save report to file?',
+      initialValue: true,
+    });
+
+    if (saveReport && typeof saveReport === 'boolean') {
+      // Generate filename from input
+      let filename: string;
+      if (isUrl) {
+        try {
+          const url = new URL(input);
+          filename = url.hostname.replace(/^www\./, '').replace(/\./g, '-');
+        } catch {
+          filename = 'competitor-research';
+        }
+      } else {
+        filename = input.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
+      }
+
+      const reportPath = path.join(process.cwd(), `${filename}-competition.md`);
+      await generateResearchReport(result.research, reportPath, isUrl ? input : `"${input}"`);
+      ui.success(`Report saved: ${reportPath}`);
+    }
+  });
+
+// Default command (interactive mode selection)
 program
   .action(async () => {
-    // Run create command by default
-    await program.commands.find(cmd => cmd.name() === 'create')?.parseAsync([]);
+    setupSignalHandlers();
+    ui.banner();
+
+    const { select } = await import('@clack/prompts');
+
+    const mode = await select({
+      message: 'What would you like to do?',
+      options: [
+        {
+          value: 'create',
+          label: 'Create a new SaaS project',
+          hint: 'Full wizard: idea discovery, market research, and project generation',
+        },
+        {
+          value: 'compete',
+          label: 'Research competitors',
+          hint: 'Analyze competition for an idea or URL',
+        },
+        {
+          value: 'config',
+          label: 'Configure settings',
+          hint: 'Set up API keys and credentials',
+        },
+        {
+          value: 'domain',
+          label: 'Check domain availability',
+          hint: 'See if a domain is available and get suggestions',
+        },
+      ],
+    });
+
+    if (typeof mode !== 'string') {
+      // User cancelled
+      return;
+    }
+
+    ui.log('');
+
+    if (mode === 'create') {
+      await program.commands.find(cmd => cmd.name() === 'create')?.parseAsync([]);
+    } else if (mode === 'compete') {
+      const { text } = await import('@clack/prompts');
+      const input = await text({
+        message: 'Enter a SaaS idea or competitor URL to analyze:',
+        placeholder: 'e.g., "AI-powered invoicing" or https://example.com',
+        validate: (value) => {
+          if (!value.trim()) return 'Please enter an idea or URL';
+        },
+      });
+
+      if (typeof input !== 'string') return;
+
+      // Re-run with the compete command
+      await program.parseAsync(['node', 'saasfactory', 'compete', input]);
+    } else if (mode === 'config') {
+      await program.commands.find(cmd => cmd.name() === 'config')?.parseAsync([]);
+    } else if (mode === 'domain') {
+      const { text } = await import('@clack/prompts');
+      const domain = await text({
+        message: 'Enter a domain name to check:',
+        placeholder: 'e.g., myapp or myapp.com',
+        validate: (value) => {
+          if (!value.trim()) return 'Please enter a domain name';
+        },
+      });
+
+      if (typeof domain !== 'string') return;
+
+      await program.parseAsync(['node', 'saasfactory', 'domain', domain]);
+    }
   });
 
 export function runCLI(): void {

@@ -83,9 +83,10 @@ function formatElapsed(ms: number): string {
 
 interface ClaudeJsonResponse {
   type: string;
-  content?: string;
+  subtype?: string;
+  result?: string;
+  is_error?: boolean;
   session_id?: string;
-  error?: string;
 }
 
 /**
@@ -138,6 +139,7 @@ export async function claudeGenerate(
   try {
     const { stdout } = await execa('claude', args, {
       timeout: options.timeout ?? 120000, // 2 minute default
+      stdin: 'ignore', // Don't wait for stdin (execa v9 change)
       env: {
         ...process.env,
         // Ensure non-interactive mode
@@ -145,17 +147,20 @@ export async function claudeGenerate(
       },
     });
 
-    // If JSON output, parse and extract content
+    // If JSON output, parse and extract result
     if (options.outputFormat === 'json') {
       try {
         const parsed = JSON.parse(stdout) as ClaudeJsonResponse;
-        if (parsed.error) {
-          throw new Error(parsed.error);
+        if (parsed.is_error) {
+          throw new Error(parsed.result ?? 'Unknown error');
         }
-        return parsed.content ?? stdout;
-      } catch {
+        return parsed.result ?? stdout;
+      } catch (e) {
         // If parsing fails, return raw output
-        return stdout;
+        if (e instanceof SyntaxError) {
+          return stdout;
+        }
+        throw e;
       }
     }
 

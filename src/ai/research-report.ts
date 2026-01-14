@@ -17,12 +17,30 @@ const VERDICT_LABELS: Record<MarketVerdict, string> = {
 };
 
 /**
+ * Get color function for verdict with fallback
+ */
+function getVerdictColor(verdict: string | undefined): (text: string) => string {
+  if (!verdict) return chalk.yellow;
+  const key = verdict.toLowerCase() as MarketVerdict;
+  return VERDICT_COLORS[key] || chalk.yellow;
+}
+
+/**
+ * Get label for verdict with fallback
+ */
+function getVerdictLabel(verdict: string | undefined): string {
+  if (!verdict) return 'MODERATE OPPORTUNITY';
+  const key = verdict.toLowerCase() as MarketVerdict;
+  return VERDICT_LABELS[key] || 'MODERATE OPPORTUNITY';
+}
+
+/**
  * Display market research summary in terminal
  */
 export function displayResearchSummary(research: MarketResearch): void {
   const { marketValidation, competitors, opportunities, featureIdeas } = research;
-  const verdictColor = VERDICT_COLORS[marketValidation.verdict];
-  const verdictLabel = VERDICT_LABELS[marketValidation.verdict];
+  const verdictColor = getVerdictColor(marketValidation.verdict);
+  const verdictLabel = getVerdictLabel(marketValidation.verdict);
 
   console.log('');
   console.log(chalk.hex('#6366f1').bold('▸ Market Research Results'));
@@ -124,7 +142,7 @@ export async function generateResearchReport(
   projectName: string,
 ): Promise<void> {
   const { marketValidation, competitors } = research;
-  const verdictLabel = VERDICT_LABELS[marketValidation.verdict];
+  const verdictLabel = getVerdictLabel(marketValidation.verdict);
 
   const markdown = `# Market Research Report: ${projectName}
 
@@ -233,7 +251,7 @@ ${marketValidation.verdict === 'saturated' ? `
  */
 export function getResearchOneLiner(research: MarketResearch): string {
   const { score, verdict } = research.marketValidation;
-  const verdictLabel = VERDICT_LABELS[verdict];
+  const verdictLabel = getVerdictLabel(verdict);
   const competitorCount = research.competitors.length;
 
   return `Score: ${score}/10 (${verdictLabel}) | ${competitorCount} competitors found | ${research.opportunities.length} opportunities identified`;

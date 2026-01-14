@@ -28,14 +28,16 @@ export interface GenerateResult {
 
 /**
  * Main generator orchestrator
+ * @param context - Project configuration context
+ * @param targetDir - Optional target directory path (defaults to cwd + project name)
  */
-export async function generate(context: ProjectContext): Promise<GenerateResult> {
-  const projectPath = path.join(process.cwd(), context.name);
+export async function generate(context: ProjectContext, targetDir?: string): Promise<GenerateResult> {
+  const projectPath = targetDir || path.join(process.cwd(), context.name);
   const errors: string[] = [];
 
   // Check if directory exists
   if (await exists(projectPath)) {
-    ui.error(`Directory "${context.name}" already exists`);
+    ui.error(`Directory already exists: ${projectPath}`);
     return { success: false, projectPath, errors: ['Directory already exists'] };
   }
 

@@ -14,13 +14,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "bun run src/index.ts",
     "build": "tsup src/index.ts --format esm --dts --clean",
-    "start": "node dist/index.js",
+    "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest",
-    "prepublishOnly": "npm run build && npm test -- --run"
+    "prepublishOnly": "bun run build && bun test -- --run"
   },
   "keywords": [
     "saas",
@@ -48,7 +48,7 @@
   },
   "homepage": "https://github.com/your-username/saasfactory#readme",
   "engines": {
-    "node": ">=20.0.0"
+    "bun": ">=1.0.0"
   },
   "dependencies": {
     "@clack/prompts": "^0.11.0",

@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 // Type definitions
-export type SaasType = 'b2b' | 'b2c' | 'marketplace' | 'tool';
-export type PricingType = 'freemium' | 'subscription' | 'one-time' | 'usage-based';
+export type ProjectType = 'web-saas' | 'mobile-app' | 'game' | 'marketplace' | 'api-service' | 'other';
+export type SaasType = 'b2b' | 'b2c' | 'marketplace' | 'tool'; // Legacy, kept for compatibility
+export type PricingType = 'freemium' | 'subscription' | 'one-time' | 'usage-based' | 'free-with-ads';
 export type AnalyticsProvider = 'plausible' | 'posthog' | 'none';
 
 export interface PricingTier {
@@ -34,6 +35,63 @@ export interface FAQItem {
 
 // Market Research Types
 export type MarketVerdict = 'strong' | 'moderate' | 'weak' | 'saturated';
+
+// Idea Discovery Types
+export type DifficultyLabel = 'trivial' | 'easy' | 'moderate' | 'challenging' | 'complex';
+export type CostEstimate = 'free' | 'low' | 'medium' | 'high';
+export type IncomeModel = 'subscription' | 'freemium' | 'one-time' | 'usage-based';
+
+export interface ClaudeCodeDifficulty {
+  score: 1 | 2 | 3 | 4 | 5;
+  label: DifficultyLabel;
+  reasoning: string;
+  estimatedHours: string;
+  aiStrengths: string[];
+}
+
+export interface MarketingTactic {
+  channel: string;
+  approach: string;
+  expectedOutcome?: string;
+}
+
+export interface MarketingStrategy {
+  primaryChannels: string[];
+  launchStrategy: string;
+  estimatedCost: CostEstimate;
+  timeToFirstUsers: string;
+  tactics: MarketingTactic[];
+}
+
+export interface IncomeProjection {
+  model: IncomeModel;
+  suggestedPricing: string;
+  monthlyPotential: string;
+  timeToFirstRevenue?: string;
+}
+
+export interface SaasIdea {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
+  problemSolved: string;
+  targetAudience: string[];
+  coreFeatures: string[];
+
+  marketOpportunity: {
+    score: number;
+    verdict: MarketVerdict;
+    reasoning: string;
+    competitors: string[];
+    gap: string;
+  };
+
+  difficulty: ClaudeCodeDifficulty;
+  marketing: MarketingStrategy;
+  income: IncomeProjection;
+  sources: string[];
+}
 
 export interface Competitor {
   name: string;
@@ -143,6 +201,9 @@ export interface ProjectContext {
   // Market Research (optional, from AI analysis)
   marketResearch?: MarketResearch;
 
+  // Discovered Idea (if user used idea discovery)
+  discoveredIdea?: SaasIdea;
+
   // Environment
   environment: EnvironmentConfig;
 
@@ -240,6 +301,47 @@ export const ProjectContextSchema = z.object({
     risks: z.array(z.string()),
     featureIdeas: z.array(z.string()),
     recommendations: z.array(z.string()),
+  }).optional(),
+  discoveredIdea: z.object({
+    id: z.string(),
+    name: z.string(),
+    tagline: z.string(),
+    description: z.string(),
+    problemSolved: z.string(),
+    targetAudience: z.array(z.string()),
+    coreFeatures: z.array(z.string()),
+    marketOpportunity: z.object({
+      score: z.number().min(1).max(10),
+      verdict: z.enum(['strong', 'moderate', 'weak', 'saturated']),
+      reasoning: z.string(),
+      competitors: z.array(z.string()),
+      gap: z.string(),
+    }),
+    difficulty: z.object({
+      score: z.number().min(1).max(5),
+      label: z.enum(['trivial', 'easy', 'moderate', 'challenging', 'complex']),
+      reasoning: z.string(),
+      estimatedHours: z.string(),
+      aiStrengths: z.array(z.string()),
+    }),
+    marketing: z.object({
+      primaryChannels: z.array(z.string()),
+      launchStrategy: z.string(),
+      estimatedCost: z.enum(['free', 'low', 'medium', 'high']),
+      timeToFirstUsers: z.string(),
+      tactics: z.array(z.object({
+        channel: z.string(),
+        approach: z.string(),
+        expectedOutcome: z.string().optional(),
+      })),
+    }),
+    income: z.object({
+      model: z.enum(['subscription', 'freemium', 'one-time', 'usage-based']),
+      suggestedPricing: z.string(),
+      monthlyPotential: z.string(),
+      timeToFirstRevenue: z.string().optional(),
+    }),
+    sources: z.array(z.string()),
   }).optional(),
   environment: z.object({
     clerkPublishableKey: z.string().optional(),
