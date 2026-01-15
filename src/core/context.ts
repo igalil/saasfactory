@@ -101,21 +101,34 @@ export interface Competitor {
   features: string[];
   strengths: string[];
   weaknesses: string[];
+  // Enhanced fields from deep research
+  type?: 'direct' | 'indirect';
+  userRating?: string; // e.g., "4.5/5 on G2 (234 reviews)"
+  funding?: string; // e.g., "$15M Series A - 2023"
+}
+
+export interface ReviewInsights {
+  commonPraises: string[];
+  commonComplaints: string[];
+  featureRequests: string[];
 }
 
 export interface MarketResearch {
   ideaSummary: string;
   marketValidation: {
     score: number; // 1-10
-    verdict: MarketVerdict;
+    verdict: MarketVerdict | 'low' | 'high' | 'very_high';
     reasoning: string;
   };
   marketSize?: string;
+  marketTrends?: string[]; // Industry trends from research
   targetAudience: string[];
   competitors: Competitor[];
+  reviewInsights?: ReviewInsights; // Aggregated review data
   opportunities: string[];
   risks: string[];
   featureIdeas: string[];
+  positioningStrategy?: string; // How to differentiate
   recommendations: string[];
 }
 

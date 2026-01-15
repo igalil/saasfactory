@@ -2,18 +2,26 @@ import chalk from 'chalk';
 import fs from 'fs-extra';
 import type { MarketResearch, MarketVerdict } from '../core/context.js';
 
-const VERDICT_COLORS: Record<MarketVerdict, (text: string) => string> = {
+type ExtendedVerdict = MarketVerdict | 'low' | 'high' | 'very_high';
+
+const VERDICT_COLORS: Record<string, (text: string) => string> = {
   strong: chalk.green,
   moderate: chalk.yellow,
   weak: chalk.red,
   saturated: chalk.red.bold,
+  low: chalk.red,
+  high: chalk.green,
+  very_high: chalk.green.bold,
 };
 
-const VERDICT_LABELS: Record<MarketVerdict, string> = {
+const VERDICT_LABELS: Record<string, string> = {
   strong: 'STRONG OPPORTUNITY',
   moderate: 'MODERATE OPPORTUNITY',
   weak: 'WEAK OPPORTUNITY',
   saturated: 'SATURATED MARKET',
+  low: 'LOW OPPORTUNITY',
+  high: 'HIGH OPPORTUNITY',
+  very_high: 'EXCELLENT OPPORTUNITY',
 };
 
 /**

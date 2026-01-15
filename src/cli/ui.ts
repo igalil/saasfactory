@@ -14,6 +14,8 @@ export const colors = {
 };
 
 export const ui = {
+  // Color helpers accessible via ui.colors
+  colors,
 
   // Logo/Banner
   banner(): void {

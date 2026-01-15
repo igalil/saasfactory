@@ -2,6 +2,13 @@ import { claudeGenerateWithProgress, isClaudeCodeAvailable, type ProgressEvent }
 import type { MarketResearch } from '../core/context.js';
 import type { MarketResearchResult } from './market-research.js';
 
+/**
+ * Result from compete research including session ID for follow-up questions
+ */
+export interface CompeteResearchResult extends MarketResearchResult {
+  sessionId?: string;
+}
+
 export interface CompeteProgressCallback {
   (event: {
     type: 'search' | 'status' | 'sources' | 'analyzing';
@@ -106,11 +113,12 @@ function isUrl(input: string): boolean {
 
 /**
  * Research competition for a SaaS idea or analyze a competitor URL
+ * Returns research results and session ID for follow-up questions
  */
 export async function competeResearch(
   input: string,
   onProgress?: CompeteProgressCallback,
-): Promise<MarketResearchResult | null> {
+): Promise<CompeteResearchResult | null> {
   const available = await isClaudeCodeAvailable();
   if (!available) {
     return null;
@@ -188,12 +196,15 @@ ${COMPETE_IDEA_PROMPT}`;
       },
     });
 
+    // Extract session ID for follow-up questions
+    const { result: responseText, sessionId } = response;
+
     // Extract JSON from response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       const fallback = createFallbackResearch(input, isUrlInput);
       fallback.marketValidation.reasoning = 'AI response did not contain valid JSON. ' + fallback.marketValidation.reasoning;
-      return { research: fallback, isFallback: true, error: 'Invalid AI response format' };
+      return { research: fallback, isFallback: true, error: 'Invalid AI response format', sessionId };
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as MarketResearch;
@@ -201,10 +212,10 @@ ${COMPETE_IDEA_PROMPT}`;
     // Validate required fields
     if (!parsed.marketValidation || !parsed.competitors) {
       const fallback = createFallbackResearch(input, isUrlInput);
-      return { research: fallback, isFallback: true, error: 'Incomplete research data' };
+      return { research: fallback, isFallback: true, error: 'Incomplete research data', sessionId };
     }
 
-    return { research: parsed, isFallback: false };
+    return { research: parsed, isFallback: false, sessionId };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const fallback = createFallbackResearch(input, isUrlInput);

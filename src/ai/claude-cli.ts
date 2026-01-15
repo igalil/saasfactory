@@ -1,4 +1,37 @@
 import { execa, type ExecaError } from 'execa';
+import type { ChildProcess } from 'child_process';
+
+// Registry of active child processes for cleanup on exit
+const activeProcesses = new Set<ChildProcess>();
+
+/**
+ * Register a child process for cleanup on exit
+ */
+function registerProcess(child: ChildProcess): void {
+  activeProcesses.add(child);
+  child.on('exit', () => activeProcesses.delete(child));
+  child.on('error', () => activeProcesses.delete(child));
+}
+
+/**
+ * Kill all active child processes
+ * Called on SIGINT/SIGTERM to prevent orphaned processes
+ */
+export function killAllChildProcesses(): void {
+  for (const child of activeProcesses) {
+    if (!child.killed) {
+      child.kill('SIGTERM');
+    }
+  }
+  activeProcesses.clear();
+}
+
+/**
+ * Get count of active child processes (for debugging)
+ */
+export function getActiveProcessCount(): number {
+  return activeProcesses.size;
+}
 
 export interface ClaudeOptions {
   outputFormat?: 'text' | 'json' | 'stream-json';
@@ -20,8 +53,17 @@ export interface ProgressEvent {
   totalSources?: number;
 }
 
+/**
+ * Result from Claude Code with session ID for follow-up questions
+ */
+export interface ClaudeResult {
+  result: string;
+  sessionId?: string;
+}
+
 interface StreamEvent {
   type: 'system' | 'assistant' | 'user' | 'result';
+  session_id?: string;
   message?: {
     content: Array<{
       type: 'text' | 'tool_use' | 'tool_result';
@@ -180,11 +222,12 @@ export async function claudeGenerate(
 /**
  * Execute a prompt with streaming progress updates
  * Parses stream-json output to report tool usage in real-time
+ * Returns result and session ID for follow-up questions
  */
 export async function claudeGenerateWithProgress(
   prompt: string,
   options: ClaudeOptions = {},
-): Promise<string> {
+): Promise<ClaudeResult> {
   const args: string[] = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
 
   // System prompt
@@ -211,24 +254,26 @@ export async function claudeGenerateWithProgress(
   let searchCount = 0;
   const allSources: string[] = [];
   let finalResult = '';
+  let sessionId: string | undefined;
   let buffer = '';
-
-  // Periodic fallback status update (in case stream events are slow)
-  const statusInterval = setInterval(() => {
-    options.onProgress?.({
-      type: 'tool_use',
-      tool: 'status',
-      message: `Researching... (${formatElapsed(Date.now() - startTime)} elapsed)`,
-      searchCount,
-      totalSources: allSources.length,
-    });
-  }, 5000);
 
   try {
     // Use spawn to get real-time streaming (execa v9 buffers by default)
     const { spawn } = await import('child_process');
 
-    return new Promise<string>((resolve, reject) => {
+    // Periodic fallback status update (in case stream events are slow)
+    // Created inside try block to avoid leaking interval if spawn fails
+    const statusInterval = setInterval(() => {
+      options.onProgress?.({
+        type: 'tool_use',
+        tool: 'status',
+        message: `Researching... (${formatElapsed(Date.now() - startTime)} elapsed)`,
+        searchCount,
+        totalSources: allSources.length,
+      });
+    }, 5000);
+
+    return new Promise<ClaudeResult>((resolve, reject) => {
       const child = spawn('claude', args, {
         env: {
           ...process.env,
@@ -236,6 +281,9 @@ export async function claudeGenerateWithProgress(
         },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
+
+      // Register for cleanup on process exit
+      registerProcess(child);
 
       // Close stdin immediately to signal we're not sending input
       child.stdin?.end();
@@ -331,9 +379,17 @@ export async function claudeGenerateWithProgress(
               }
             }
 
+            // Capture session ID from any event that has it
+            if (event.session_id) {
+              sessionId = event.session_id;
+            }
+
             // Capture final result
             if (event.type === 'result' && event.result) {
               finalResult = event.result;
+              if (event.session_id) {
+                sessionId = event.session_id;
+              }
             }
           } catch {
             // Non-JSON line or parse error, skip
@@ -353,6 +409,9 @@ export async function claudeGenerateWithProgress(
         if (buffer.trim()) {
           try {
             const event = JSON.parse(buffer.trim()) as StreamEvent;
+            if (event.session_id) {
+              sessionId = event.session_id;
+            }
             if (event.type === 'result' && event.result) {
               finalResult = event.result;
             }
@@ -368,7 +427,7 @@ export async function claudeGenerateWithProgress(
 
         // Return final result or try to parse from stdout
         if (finalResult) {
-          resolve(finalResult);
+          resolve({ result: finalResult, sessionId });
           return;
         }
 
@@ -377,8 +436,11 @@ export async function claudeGenerateWithProgress(
         for (let i = lines.length - 1; i >= 0; i--) {
           try {
             const event = JSON.parse(lines[i]) as StreamEvent;
+            if (event.session_id) {
+              sessionId = event.session_id;
+            }
             if (event.type === 'result' && event.result) {
-              resolve(event.result);
+              resolve({ result: event.result, sessionId });
               return;
             }
           } catch {
@@ -386,7 +448,7 @@ export async function claudeGenerateWithProgress(
           }
         }
 
-        resolve(stdout);
+        resolve({ result: stdout, sessionId });
       });
 
       child.on('error', (err) => {
@@ -442,6 +504,173 @@ export async function claudeContinue(
     ...options,
     resume: sessionId,
   });
+}
+
+/**
+ * Ask a follow-up question in an existing session
+ * Uses --resume to continue the conversation with full context
+ * Supports streaming progress for web searches
+ */
+export async function claudeFollowUp(
+  sessionId: string,
+  question: string,
+  options: ClaudeOptions = {},
+): Promise<string> {
+  // Add instruction for conversational response
+  const conversationalPrompt = `${question}
+
+IMPORTANT: Respond in a conversational, human-readable format. Do NOT return raw JSON.
+Summarize findings in clear paragraphs with bullet points where helpful.`;
+
+  const args: string[] = [
+    '-p', conversationalPrompt,
+    '--resume', sessionId,
+    '--output-format', 'stream-json',
+  ];
+
+  // Allowed tools
+  if (options.allowedTools?.length) {
+    args.push('--allowedTools', options.allowedTools.join(','));
+  }
+
+  // Max turns
+  if (options.maxTurns) {
+    args.push('--max-turns', String(options.maxTurns));
+  }
+
+  let searchCount = 0;
+  let finalResult = '';
+  let buffer = '';
+
+  try {
+    const { spawn } = await import('child_process');
+
+    return new Promise<string>((resolve, reject) => {
+      const child = spawn('claude', args, {
+        env: {
+          ...process.env,
+          CI: 'true',
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      // Register for cleanup on process exit
+      registerProcess(child);
+
+      child.stdin?.end();
+
+      let stdout = '';
+      let stderr = '';
+
+      const timeoutId = setTimeout(() => {
+        child.kill();
+        reject(new Error('Follow-up request timed out'));
+      }, options.timeout ?? 120000);
+
+      child.stdout?.on('data', (chunk: Buffer) => {
+        const data = chunk.toString();
+        stdout += data;
+        buffer += data;
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+
+          try {
+            const event = JSON.parse(trimmed) as StreamEvent;
+
+            // Track web searches for progress
+            if (event.type === 'assistant' && event.message?.content) {
+              for (const content of event.message.content) {
+                if (content.type === 'tool_use' && content.name === 'WebSearch') {
+                  searchCount++;
+                  options.onProgress?.({
+                    type: 'tool_use',
+                    tool: 'WebSearch',
+                    message: content.input?.query
+                      ? `Searching: "${content.input.query}"`
+                      : `Web search #${searchCount}`,
+                    searchCount,
+                    ...(content.input?.query && { query: content.input.query }),
+                  });
+                }
+              }
+            }
+
+            // Capture final result
+            if (event.type === 'result' && event.result) {
+              finalResult = event.result;
+            }
+          } catch {
+            // Non-JSON line, skip
+          }
+        }
+      });
+
+      child.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      child.on('close', (code) => {
+        clearTimeout(timeoutId);
+
+        // Process remaining buffer
+        if (buffer.trim()) {
+          try {
+            const event = JSON.parse(buffer.trim()) as StreamEvent;
+            if (event.type === 'result' && event.result) {
+              finalResult = event.result;
+            }
+          } catch {
+            // Ignore
+          }
+        }
+
+        if (code !== 0 && !finalResult) {
+          reject(new Error(`Follow-up failed with code ${code}: ${stderr}`));
+          return;
+        }
+
+        if (finalResult) {
+          resolve(finalResult);
+          return;
+        }
+
+        // Fallback: find result in NDJSON
+        const lines = stdout.trim().split('\n');
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try {
+            const event = JSON.parse(lines[i]) as StreamEvent;
+            if (event.type === 'result' && event.result) {
+              resolve(event.result);
+              return;
+            }
+          } catch {
+            continue;
+          }
+        }
+
+        resolve(stdout);
+      });
+
+      child.on('error', (err) => {
+        clearTimeout(timeoutId);
+        reject(new Error(`Follow-up failed: ${err.message}`));
+      });
+    });
+  } catch (error) {
+    const execaError = error as ExecaError & { timedOut?: boolean; killed?: boolean };
+    if (execaError.timedOut) {
+      throw new Error('Follow-up request timed out');
+    }
+    if (execaError.killed) {
+      throw new Error('Follow-up request was killed');
+    }
+    throw new Error(`Follow-up failed: ${execaError.message}`);
+  }
 }
 
 /**

@@ -5,6 +5,7 @@ import type { PricingType, SaasType, AnalyticsProvider, SaasIdea } from '../core
 import { formatIdeaForSelection } from '../ai/idea-report.js';
 import type { RefinedIdea } from '../ai/idea-refiner.js';
 import type { ProjectAnalysis, ProjectQuestion } from '../ai/project-analyzer.js';
+import { killAllChildProcesses } from '../ai/claude-cli.js';
 
 export type IdeaMode = 'has_idea' | 'discover' | 'validate';
 
@@ -46,6 +47,8 @@ export function setupSignalHandlers(): void {
 
   const exitWithCancel = () => {
     console.log(''); // New line after ^C
+    // Kill any spawned child processes (Claude CLI) before exiting
+    killAllChildProcesses();
     p.outro(color.yellow('Cancelled'));
     process.exit(0);
   };
@@ -808,4 +811,91 @@ export async function promptProjectConfig(
   }
 
   return answers;
+}
+
+/**
+ * Result type for prompts with follow-up question option
+ */
+export type FollowUpPromptResult<T> =
+  | { type: 'answer'; value: T }
+  | { type: 'followUp'; question: string }
+  | typeof GO_BACK_SECTION;
+
+/**
+ * Prompt with Yes/No/Ask something else... options
+ * Allows users to ask follow-up questions before making a decision
+ */
+export async function promptWithFollowUp(
+  message: string,
+  canGoBack = false,
+): Promise<FollowUpPromptResult<boolean>> {
+  while (true) {
+    const selection = await p.select({
+      message,
+      options: [
+        { value: 'yes', label: 'Yes' },
+        { value: 'no', label: 'No' },
+        { value: 'ask', label: 'Ask something else...', hint: 'Ask a follow-up question' },
+      ],
+    });
+
+    const escAction = checkEscForBack(selection);
+    if (escAction === 'hint') continue;
+    if (escAction === 'back') {
+      if (canGoBack) return GO_BACK_SECTION;
+      continue;
+    }
+
+    if (selection === 'yes') {
+      return { type: 'answer', value: true };
+    }
+
+    if (selection === 'no') {
+      return { type: 'answer', value: false };
+    }
+
+    if (selection === 'ask') {
+      // Get the follow-up question
+      while (true) {
+        const question = await p.text({
+          message: 'What would you like to know?',
+          placeholder: 'e.g., Which competitor has the best pricing?',
+          validate: (value) => {
+            if (!value.trim()) return 'Please enter a question';
+          },
+        });
+
+        const questionEscAction = checkEscForBack(question);
+        if (questionEscAction === 'hint') continue;
+        if (questionEscAction === 'back') break; // Go back to Yes/No/Ask selection
+
+        return { type: 'followUp', question: String(question) };
+      }
+      continue; // Back to main selection
+    }
+
+    continue; // Invalid selection, re-prompt
+  }
+}
+
+/**
+ * Display a follow-up answer and prompt for next action
+ * Returns true if user wants to ask another question, false to continue
+ */
+export async function promptAfterFollowUp(): Promise<boolean | typeof GO_BACK_SECTION> {
+  while (true) {
+    const selection = await p.select({
+      message: 'What would you like to do?',
+      options: [
+        { value: 'continue', label: 'Continue', hint: 'Proceed to next step' },
+        { value: 'ask', label: 'Ask another question' },
+      ],
+    });
+
+    const escAction = checkEscForBack(selection);
+    if (escAction === 'hint') continue;
+    if (escAction === 'back') return GO_BACK_SECTION;
+
+    return selection === 'ask';
+  }
 }
