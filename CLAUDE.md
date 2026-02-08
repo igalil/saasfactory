@@ -96,6 +96,7 @@ src/
 | Competition Research (URL) | `conductResearch(url, {mode:'url'})` | WebSearch, WebFetch | ~10 min |
 | Project Analysis | `analyzeProject()` | None | ~15 sec |
 | Content Generation | `claudeGenerate()` | None | ~30 sec |
+| Domain Suggestions | `claudeGenerate()` (domain cmd) | WebSearch, WebFetch (URL) or None | ~15-30 sec |
 
 All AI features degrade gracefully if Claude Code unavailable.
 
@@ -114,7 +115,7 @@ bun run dev      # Development mode
 bun link         # Link CLI globally
 saasfactory create [name]    # Main wizard
 saasfactory config           # Configure credentials
-saasfactory domain <name>    # Check domain availability
+saasfactory domain [name]    # AI domain suggestions + availability check (Vercel)
 saasfactory compete <input>  # Research competitors (idea or URL)
 ```
 

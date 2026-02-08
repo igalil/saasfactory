@@ -46,7 +46,9 @@
       "Bash(~/.bun/bin/bun:*)",
       "Bash(bun run build:*)",
       "Bash(npx tsup:*)",
-      "Bash(timeout 2 node:*)"
+      "Bash(timeout 2 node:*)",
+      "Bash(whois:*)",
+      "WebFetch(domain:docs.vercel.com)"
     ]
   }
 }

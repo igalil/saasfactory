@@ -160,9 +160,8 @@ my-app/
 Run `saasfactory config` to set up:
 
 - **GitHub Token** - For automatic repo creation
-- **Vercel Token** - For deployment
+- **Vercel Token** - For deployment and domain availability checking
 - **Google API Key** - For logo generation (Gemini 2.0 Flash)
-- **Namecheap API** - For domain availability checking
 
 ### Claude Code
 

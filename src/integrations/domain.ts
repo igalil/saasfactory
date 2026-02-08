@@ -1,9 +1,10 @@
 import { loadCredentials } from '../core/config.js';
 
+const VERCEL_API_BASE = 'https://api.vercel.com';
+
 export interface DomainCheckResult {
   domain: string;
   available: boolean;
-  premium: boolean;
   price?: {
     registration: number;
     renewal: number;
@@ -11,220 +12,151 @@ export interface DomainCheckResult {
   };
 }
 
-export interface DomainSuggestion {
+export interface BulkAvailabilityResult {
   domain: string;
   available: boolean;
 }
 
+export interface DomainPriceResult {
+  years: number;
+  purchasePrice: number;
+  renewalPrice: number;
+  transferPrice: number;
+}
+
 /**
- * Check domain availability using Namecheap API
+ * Check if a Vercel token is configured (non-throwing check)
  */
-export async function checkDomainAvailability(
-  domain: string
-): Promise<DomainCheckResult> {
+export async function hasVercelToken(): Promise<boolean> {
+  const credentials = await loadCredentials();
+  return !!credentials.vercelToken;
+}
+
+/**
+ * Get the Vercel auth header, throwing if no token is configured
+ */
+async function getVercelHeaders(): Promise<Record<string, string>> {
   const credentials = await loadCredentials();
 
-  if (!credentials.namecheapApiKey || !credentials.namecheapUsername) {
-    // Fallback: Use a simple DNS check
-    return checkDomainWithDNS(domain);
-  }
-
-  try {
-    const apiUser = credentials.namecheapUsername;
-    const apiKey = credentials.namecheapApiKey;
-    const clientIp = await getPublicIP();
-
-    const params = new URLSearchParams({
-      ApiUser: apiUser,
-      ApiKey: apiKey,
-      UserName: apiUser,
-      ClientIp: clientIp,
-      Command: 'namecheap.domains.check',
-      DomainList: domain,
-    });
-
-    const response = await fetch(
-      `https://api.namecheap.com/xml.response?${params.toString()}`
+  if (!credentials.vercelToken) {
+    throw new Error(
+      'MISCONFIGURED: No Vercel token found. Run `saasfactory config` to set your Vercel token.',
     );
-
-    if (!response.ok) {
-      throw new Error(`Namecheap API error: ${response.statusText}`);
-    }
-
-    const text = await response.text();
-
-    // Parse XML response
-    const availableMatch = text.match(/Available="(\w+)"/);
-    const premiumMatch = text.match(/IsPremiumName="(\w+)"/);
-
-    const available = availableMatch?.[1]?.toLowerCase() === 'true';
-    const premium = premiumMatch?.[1]?.toLowerCase() === 'true';
-
-    // Get pricing if available
-    let price: DomainCheckResult['price'];
-    if (available) {
-      price = await getDomainPrice(domain, {
-        namecheapApiKey: credentials.namecheapApiKey,
-        namecheapUsername: credentials.namecheapUsername,
-      });
-    }
-
-    const result: DomainCheckResult = {
-      domain,
-      available,
-      premium,
-    };
-    if (price) {
-      result.price = price;
-    }
-    return result;
-  } catch (error) {
-    console.warn('Namecheap API failed, using DNS fallback:', error);
-    return checkDomainWithDNS(domain);
   }
+
+  return {
+    Authorization: `Bearer ${credentials.vercelToken}`,
+    'Content-Type': 'application/json',
+  };
 }
 
 /**
- * Fallback domain check using DNS lookup
+ * Check single domain availability via Vercel Registrar API
+ * GET /v1/registrar/domains/{domain}/availability
  */
-async function checkDomainWithDNS(domain: string): Promise<DomainCheckResult> {
-  try {
-    // Try to resolve the domain - if it fails, domain might be available
-    const response = await fetch(`https://dns.google/resolve?name=${domain}&type=A`);
-    const data = (await response.json()) as { Answer?: unknown[] };
-
-    // If there's an answer, domain is taken
-    const available = !data.Answer || data.Answer.length === 0;
-
-    return {
-      domain,
-      available,
-      premium: false,
-      // Can't get pricing without Namecheap API
-    };
-  } catch {
-    // If DNS lookup fails, assume domain might be available
-    return {
-      domain,
-      available: true,
-      premium: false,
-    };
-  }
-}
-
-/**
- * Get domain pricing from Namecheap
- */
-async function getDomainPrice(
+export async function checkDomainAvailability(
   domain: string,
-  credentials: { namecheapApiKey?: string; namecheapUsername?: string }
-): Promise<DomainCheckResult['price'] | undefined> {
-  if (!credentials.namecheapApiKey || !credentials.namecheapUsername) {
-    return undefined;
+): Promise<DomainCheckResult> {
+  const headers = await getVercelHeaders();
+
+  const response = await fetch(
+    `${VERCEL_API_BASE}/v1/registrar/domains/${encodeURIComponent(domain)}/availability`,
+    { headers },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Vercel API error (${response.status}): ${text}`);
   }
 
-  try {
-    const tld = domain.split('.').pop() || 'com';
-    const clientIp = await getPublicIP();
+  const data = (await response.json()) as { available: boolean };
 
-    const params = new URLSearchParams({
-      ApiUser: credentials.namecheapUsername,
-      ApiKey: credentials.namecheapApiKey,
-      UserName: credentials.namecheapUsername,
-      ClientIp: clientIp,
-      Command: 'namecheap.users.getPricing',
-      ProductType: 'DOMAIN',
-      ProductCategory: 'DOMAINS',
-      ProductName: tld,
-    });
+  const result: DomainCheckResult = {
+    domain,
+    available: data.available,
+  };
 
-    const response = await fetch(
-      `https://api.namecheap.com/xml.response?${params.toString()}`
-    );
-
-    if (!response.ok) return undefined;
-
-    const text = await response.text();
-
-    // Parse registration price
-    const registerMatch = text.match(/register.*?Price="([\d.]+)"/i);
-    const renewMatch = text.match(/renew.*?Price="([\d.]+)"/i);
-
-    if (registerMatch) {
-      return {
-        registration: parseFloat(registerMatch[1] ?? '0'),
-        renewal: parseFloat(renewMatch?.[1] ?? registerMatch[1] ?? '0'),
+  // Fetch pricing if available
+  if (data.available) {
+    const price = await getDomainPrice(domain);
+    if (price) {
+      result.price = {
+        registration: price.purchasePrice,
+        renewal: price.renewalPrice,
         currency: 'USD',
       };
     }
-  } catch {
-    // Pricing lookup failed
   }
 
-  return undefined;
+  return result;
 }
 
 /**
- * Generate domain name suggestions based on project name
+ * Check bulk domain availability via Vercel Registrar API
+ * POST /v1/registrar/domains/availability (max 50 domains)
  */
-export async function suggestDomains(
-  projectName: string,
-  description: string
-): Promise<DomainSuggestion[]> {
-  const baseName = projectName.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const tlds = ['com', 'io', 'co', 'app', 'dev', 'ai'];
+export async function checkBulkAvailability(
+  domains: string[],
+): Promise<BulkAvailabilityResult[]> {
+  const headers = await getVercelHeaders();
 
-  const suggestions: DomainSuggestion[] = [];
+  // API limit is 50 domains per request
+  const batch = domains.slice(0, 50);
 
-  // Generate variations
-  const variations = [
-    baseName,
-    `get${baseName}`,
-    `try${baseName}`,
-    `use${baseName}`,
-    `${baseName}app`,
-    `${baseName}hq`,
-  ];
+  const response = await fetch(
+    `${VERCEL_API_BASE}/v1/registrar/domains/availability`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ domains: batch }),
+    },
+  );
 
-  // Check availability for each variation + TLD combo
-  for (const variation of variations) {
-    for (const tld of tlds) {
-      const domain = `${variation}.${tld}`;
-      try {
-        const result = await checkDomainAvailability(domain);
-        suggestions.push({
-          domain,
-          available: result.available,
-        });
-
-        // Limit to prevent too many API calls
-        if (suggestions.length >= 12) break;
-      } catch {
-        // Skip failed checks
-      }
-    }
-    if (suggestions.length >= 12) break;
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Vercel API error (${response.status}): ${text}`);
   }
 
-  // Sort: available first, then by TLD preference
-  return suggestions.sort((a, b) => {
-    if (a.available !== b.available) return a.available ? -1 : 1;
-    const tldOrder = ['com', 'io', 'co', 'app', 'dev', 'ai'];
-    const aTld = a.domain.split('.').pop() || '';
-    const bTld = b.domain.split('.').pop() || '';
-    return tldOrder.indexOf(aTld) - tldOrder.indexOf(bTld);
-  });
+  const data = (await response.json()) as {
+    results: Array<{ domain: string; available: boolean }>;
+  };
+
+  return data.results;
 }
 
 /**
- * Get public IP for Namecheap API
+ * Get domain pricing via Vercel Registrar API
+ * GET /v1/registrar/domains/{domain}/price
  */
-async function getPublicIP(): Promise<string> {
+export async function getDomainPrice(
+  domain: string,
+): Promise<DomainPriceResult | null> {
+  const headers = await getVercelHeaders();
+
   try {
-    const response = await fetch('https://api.ipify.org?format=json');
-    const data = (await response.json()) as { ip: string };
-    return data.ip;
+    const response = await fetch(
+      `${VERCEL_API_BASE}/v1/registrar/domains/${encodeURIComponent(domain)}/price`,
+      { headers },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as {
+      years: number;
+      purchasePrice: number | string;
+      renewalPrice: number | string;
+      transferPrice: number | string;
+    };
+
+    return {
+      years: data.years,
+      purchasePrice: typeof data.purchasePrice === 'string' ? parseFloat(data.purchasePrice) : data.purchasePrice,
+      renewalPrice: typeof data.renewalPrice === 'string' ? parseFloat(data.renewalPrice) : data.renewalPrice,
+      transferPrice: typeof data.transferPrice === 'string' ? parseFloat(data.transferPrice) : data.transferPrice,
+    };
   } catch {
-    return '127.0.0.1';
+    return null;
   }
 }

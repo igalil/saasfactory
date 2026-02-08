@@ -37,7 +37,7 @@ import { analyzeProject, type ProjectAnalysis } from '../ai/project-analyzer.js'
 import type { SaasIdea } from '../core/context.js';
 import { generate } from '../core/generator.js';
 import path from 'path';
-import { checkDomainAvailability, suggestDomains } from '../integrations/domain.js';
+import { checkDomainAvailability, checkBulkAvailability, getDomainPrice, hasVercelToken } from '../integrations/domain.js';
 import { setupGit } from '../integrations/git.js';
 import { isGitHubConfigured, setupGitHubRepo, getGitHubUser } from '../integrations/github.js';
 import { isVercelConfigured, setupVercelProject } from '../integrations/vercel.js';
@@ -784,60 +784,301 @@ program
     }
   });
 
-// Domain check command
+// Domain check command — interactive AI domain suggester
 program
-  .command('domain <name>')
-  .description('Check domain availability and get suggestions')
-  .option('-s, --suggest', 'Show domain suggestions')
-  .action(async (name: string, options?: { suggest?: boolean }) => {
+  .command('domain [name]')
+  .description('AI domain suggestions + availability check (Vercel)')
+  .action(async (name?: string) => {
+    setupSignalHandlers();
     ui.banner();
-    ui.heading('Domain Check');
+    ui.heading('Domain Finder');
 
-    // Ensure domain has TLD
-    const domain = name.includes('.') ? name : `${name}.com`;
+    const { text, select } = await import('@clack/prompts');
 
-    const spinner = ui.spinner(`Checking ${domain} availability...`);
+    let projectDescription = '';
 
-    try {
-      const result = await checkDomainAvailability(domain);
-      spinner.stop();
+    /**
+     * Display a single domain check result
+     */
+    function displayDomainResult(result: { domain: string; available: boolean; price?: { registration: number; renewal: number; currency: string } }): void {
+      ui.keyValue('Domain', result.domain);
+      if (result.available) {
+        ui.success('Available');
+        if (result.price) {
+          ui.keyValue('Registration', `$${result.price.registration} ${result.price.currency}`);
+          ui.keyValue('Renewal', `$${result.price.renewal}/year`);
+        }
+      } else {
+        ui.error('Taken');
+      }
+    }
+
+    /**
+     * Display bulk results as a table
+     */
+    function displayBulkResults(results: Array<{ domain: string; available: boolean; price?: { purchasePrice: number; renewalPrice: number } | null }>): void {
+      const maxDomainLen = Math.max(...results.map(r => r.domain.length), 6);
 
       ui.log('');
-      ui.keyValue('Domain', result.domain);
-      ui.keyValue('Available', result.available ? 'Yes' : 'No');
+      ui.log(
+        `  ${ui.colors.bold('Domain'.padEnd(maxDomainLen + 2))}` +
+        `${ui.colors.bold('Status'.padEnd(12))}` +
+        `${ui.colors.bold('Price')}`,
+      );
+      ui.divider();
 
-      if (result.premium) {
-        ui.keyValue('Premium', 'Yes (higher price)');
+      for (const r of results) {
+        const price = r.available && r.price
+          ? `$${r.price.purchasePrice}/yr`
+          : '';
+        ui.log(`  ${r.domain.padEnd(maxDomainLen + 2)}${(r.available ? 'Available' : 'Taken').padEnd(12)}${price}`);
+      }
+      ui.log('');
+    }
+
+    /**
+     * Use AI to suggest domain names for a project description or URL
+     */
+    async function suggestDomainsWithAI(description: string): Promise<string[]> {
+      const hasAI = await isClaudeCodeAvailable();
+      if (!hasAI) {
+        ui.warn('Claude Code CLI not found. Cannot generate AI suggestions.');
+        ui.info('Install Claude Code: https://claude.ai/code');
+        return [];
       }
 
-      if (result.price) {
-        ui.keyValue('Registration', `$${result.price.registration} ${result.price.currency}`);
-        ui.keyValue('Renewal', `$${result.price.renewal}/year`);
+      const isUrl = description.startsWith('http://') || description.startsWith('https://');
+      const allowedTools = isUrl ? ['WebSearch', 'WebFetch'] : undefined;
+      const timeout = isUrl ? 60000 : 30000;
+
+      const systemPrompt = `You are a domain name expert. Given a project description, suggest 8-10 creative, brandable domain names. Include a mix of TLDs (.com, .io, .co, .app, .dev, .ai). Prefer short, memorable, easy-to-spell names. Return ONLY valid JSON: { "domains": ["example.com", ...] }`;
+
+      const prompt = isUrl
+        ? `Visit this URL and understand what the product does, then suggest 8-10 creative domain names for a similar project:\n${description}`
+        : `Suggest 8-10 creative domain names for this project:\n${description}`;
+
+      const spinner = ui.spinner(isUrl ? 'Analyzing website and generating domain ideas...' : 'Generating domain ideas with AI...');
+
+      try {
+        const response = await claudeGenerate(prompt, {
+          systemPrompt,
+          allowedTools,
+          timeout,
+          outputFormat: 'json',
+          maxTurns: isUrl ? 5 : 2,
+        });
+
+        spinner.stop();
+
+        // Extract JSON from response
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]) as { domains?: string[] };
+          if (Array.isArray(parsed.domains)) {
+            return parsed.domains.filter((d): d is string => typeof d === 'string' && d.includes('.'));
+          }
+        }
+
+        return [];
+      } catch (error) {
+        spinner.fail('AI suggestion failed');
+        ui.error(error instanceof Error ? error.message : String(error));
+        return [];
+      }
+    }
+
+    /**
+     * Display domains as a plain list (no availability data)
+     */
+    function displayDomainList(domains: string[]): void {
+      ui.log('');
+      ui.subheading('AI-suggested domains:');
+      for (const d of domains) {
+        ui.log(`    ${d}`);
+      }
+      ui.log('');
+      ui.warn('Configure a Vercel token to check availability & pricing.');
+      ui.info('Run: saasfactory config');
+      ui.log('');
+    }
+
+    /**
+     * Check availability + pricing for a list of domains and display results.
+     * Falls back to a plain list if no Vercel token is configured.
+     */
+    async function checkAndDisplayDomains(domains: string[]): Promise<void> {
+      const canCheck = await hasVercelToken();
+      if (!canCheck) {
+        displayDomainList(domains);
+        return;
       }
 
-      // Show suggestions if requested or if domain is taken
-      if (options?.suggest || !result.available) {
-        ui.log('');
-        ui.heading('Suggestions');
+      const spinner = ui.spinner(`Checking availability for ${domains.length} domains...`);
 
-        const suggestSpinner = ui.spinner('Finding available alternatives...');
-        const baseName = name.replace(/\.[^.]+$/, '');
-        const suggestions = await suggestDomains(baseName, '');
-        suggestSpinner.stop();
+      try {
+        const bulkResults = await checkBulkAvailability(domains);
 
-        const available = suggestions.filter(s => s.available).slice(0, 6);
-        if (available.length > 0) {
-          ui.subheading('Available domains:');
-          available.forEach(s => {
-            ui.success(s.domain);
+        // Fetch prices for available domains in parallel
+        const availableDomains = bulkResults.filter(r => r.available).map(r => r.domain);
+        const priceMap = new Map<string, { purchasePrice: number; renewalPrice: number } | null>();
+
+        if (availableDomains.length > 0) {
+          spinner.text = 'Fetching pricing...';
+          const prices = await Promise.all(
+            availableDomains.map(d => getDomainPrice(d)),
+          );
+          availableDomains.forEach((d, i) => {
+            priceMap.set(d, prices[i]);
           });
-        } else {
-          ui.info('No available alternatives found.');
+        }
+
+        spinner.stop();
+
+        const enrichedResults = bulkResults.map(r => ({
+          domain: r.domain,
+          available: r.available,
+          price: priceMap.get(r.domain) ?? null,
+        }));
+
+        // Sort: available first
+        enrichedResults.sort((a, b) => {
+          if (a.available !== b.available) return a.available ? -1 : 1;
+          return 0;
+        });
+
+        displayBulkResults(enrichedResults);
+      } catch (error) {
+        spinner.fail('Availability check failed');
+        ui.error(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    // --- Entry point: name argument or description prompt ---
+
+    if (name) {
+      // Direct domain check
+      const domain = name.includes('.') ? name : `${name}.com`;
+      const canCheck = await hasVercelToken();
+
+      if (!canCheck) {
+        ui.log('');
+        ui.keyValue('Domain', domain);
+        ui.warn('Configure a Vercel token to check availability & pricing.');
+        ui.info('Run: saasfactory config');
+      } else {
+        const spinner = ui.spinner(`Checking ${domain}...`);
+        try {
+          const result = await checkDomainAvailability(domain);
+          spinner.stop();
+          ui.log('');
+          displayDomainResult(result);
+        } catch (error) {
+          spinner.fail('Domain check failed');
+          ui.error(error instanceof Error ? error.message : String(error));
         }
       }
-    } catch (error) {
-      spinner.fail('Domain check failed');
-      ui.log(String(error));
+    } else {
+      // No name provided — ask for project description and generate AI suggestions
+      const descriptionInput = await text({
+        message: 'Describe your project or paste a URL:',
+        placeholder: 'e.g., "AI-powered invoicing for freelancers" or https://example.com',
+        validate: (value) => {
+          if (!value.trim()) return 'Please enter a description or URL';
+        },
+      });
+
+      if (typeof descriptionInput !== 'string') return;
+
+      projectDescription = descriptionInput;
+
+      const domains = await suggestDomainsWithAI(projectDescription);
+      if (domains.length > 0) {
+        await checkAndDisplayDomains(domains);
+      }
+    }
+
+    // --- Interactive loop ---
+
+    while (true) {
+      const action = await select({
+        message: 'What would you like to do?',
+        options: [
+          {
+            value: 'check',
+            label: 'Check a specific domain',
+            hint: 'Enter a domain name to check availability',
+          },
+          {
+            value: 'suggest',
+            label: 'Get more AI suggestions',
+            hint: projectDescription ? 'Generate more creative domain ideas' : 'Describe your project first',
+          },
+          {
+            value: 'done',
+            label: 'Done',
+            hint: 'Exit domain finder',
+          },
+        ],
+      });
+
+      if (typeof action !== 'string' || action === 'done') {
+        ui.log('');
+        break;
+      }
+
+      if (action === 'check') {
+        const domainInput = await text({
+          message: 'Enter a domain to check:',
+          placeholder: 'e.g., myapp.com',
+          validate: (value) => {
+            if (!value.trim()) return 'Please enter a domain name';
+          },
+        });
+
+        if (typeof domainInput !== 'string') continue;
+
+        const domain = domainInput.includes('.') ? domainInput : `${domainInput}.com`;
+        const canCheck = await hasVercelToken();
+
+        if (!canCheck) {
+          ui.log('');
+          ui.keyValue('Domain', domain);
+          ui.warn('Configure a Vercel token to check availability & pricing.');
+          ui.info('Run: saasfactory config');
+          ui.log('');
+        } else {
+          const spinner = ui.spinner(`Checking ${domain}...`);
+          try {
+            const result = await checkDomainAvailability(domain);
+            spinner.stop();
+            ui.log('');
+            displayDomainResult(result);
+            ui.log('');
+          } catch (error) {
+            spinner.fail('Domain check failed');
+            ui.error(error instanceof Error ? error.message : String(error));
+          }
+        }
+      } else if (action === 'suggest') {
+        if (!projectDescription) {
+          const descInput = await text({
+            message: 'Describe your project or paste a URL:',
+            placeholder: 'e.g., "AI-powered invoicing for freelancers" or https://example.com',
+            validate: (value) => {
+              if (!value.trim()) return 'Please enter a description or URL';
+            },
+          });
+
+          if (typeof descInput !== 'string') continue;
+
+          projectDescription = descInput;
+        }
+
+        const domains = await suggestDomainsWithAI(projectDescription);
+        if (domains.length > 0) {
+          await checkAndDisplayDomains(domains);
+        }
+      }
     }
   });
 
@@ -1168,8 +1409,8 @@ program
         },
         {
           value: 'domain',
-          label: 'Check domain availability',
-          hint: 'See if a domain is available and get suggestions',
+          label: 'Find a domain',
+          hint: 'AI domain suggestions + availability check',
         },
       ],
     });
@@ -1200,18 +1441,7 @@ program
     } else if (mode === 'config') {
       await program.commands.find(cmd => cmd.name() === 'config')?.parseAsync([]);
     } else if (mode === 'domain') {
-      const { text } = await import('@clack/prompts');
-      const domain = await text({
-        message: 'Enter a domain name to check:',
-        placeholder: 'e.g., myapp or myapp.com',
-        validate: (value) => {
-          if (!value.trim()) return 'Please enter a domain name';
-        },
-      });
-
-      if (typeof domain !== 'string') return;
-
-      await program.parseAsync(['node', 'saasfactory', 'domain', domain]);
+      await program.parseAsync(['node', 'saasfactory', 'domain']);
     }
   });
 
