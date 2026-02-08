@@ -27,7 +27,7 @@ import {
   saveCredentials,
   getConfigDir,
 } from '../core/config.js';
-import { claudeGenerate, isClaudeCodeAvailable, claudeFollowUp } from '../ai/claude-cli.js';
+import { claudeGenerate, claudeGenerateWithProgress, isClaudeCodeAvailable, claudeFollowUp } from '../ai/claude-cli.js';
 import { conductResearch, getModeConfig, type ResearchMode } from '../ai/research.js';
 import { displayResearchSummary, generateResearchReport } from '../ai/research-report.js';
 import { discoverSaasIdeas, type DiscoveryProgressEvent } from '../ai/idea-discovery.js';
@@ -844,25 +844,43 @@ program
         return [];
       }
 
-      const isUrl = description.startsWith('http://') || description.startsWith('https://');
-      const allowedTools = isUrl ? ['WebSearch', 'WebFetch'] : undefined;
-      const timeout = isUrl ? 60000 : 30000;
+      // Detect URLs anywhere in the input (http://, https://, or www.)
+      const hasUrl = /https?:\/\/\S+|www\.\S+/i.test(description);
+      const allowedTools = hasUrl ? ['WebSearch', 'WebFetch'] : undefined;
+      const timeout = hasUrl ? 120000 : 60000;
 
-      const systemPrompt = `You are a domain name expert. Given a project description, suggest 8-10 creative, brandable domain names. Include a mix of TLDs (.com, .io, .co, .app, .dev, .ai). Prefer short, memorable, easy-to-spell names. Return ONLY valid JSON: { "domains": ["example.com", ...] }`;
+      const systemPrompt = `You are a domain name expert. Given a project description (which may include a URL to analyze), suggest 8-10 creative, brandable domain names. Include a mix of TLDs (.com, .io, .co, .app, .dev, .ai). Prefer short, memorable, easy-to-spell names. If a URL is provided, visit it to understand the product first. Return ONLY valid JSON: { "domains": ["example.com", ...] }`;
 
-      const prompt = isUrl
-        ? `Visit this URL and understand what the product does, then suggest 8-10 creative domain names for a similar project:\n${description}`
+      const prompt = hasUrl
+        ? `Analyze the website mentioned below, understand what the product does, then suggest 8-10 creative domain names:\n${description}`
         : `Suggest 8-10 creative domain names for this project:\n${description}`;
 
-      const spinner = ui.spinner(isUrl ? 'Analyzing website and generating domain ideas...' : 'Generating domain ideas with AI...');
+      let spinner = ui.spinner(hasUrl ? 'Analyzing website...' : 'Generating domain ideas with AI...');
+      let searchCount = 0;
 
       try {
-        const response = await claudeGenerate(prompt, {
+        const { result: response } = await claudeGenerateWithProgress(prompt, {
           systemPrompt,
           allowedTools,
           timeout,
-          outputFormat: 'json',
-          maxTurns: isUrl ? 5 : 2,
+          maxTurns: hasUrl ? 5 : 2,
+          onProgress: (event) => {
+            if (event.tool === 'WebSearch' && event.query) {
+              spinner.stop();
+              ui.log(`  ${ui.colors.dim('Search:')} ${event.query.length > 60 ? event.query.slice(0, 60) + '...' : event.query}`);
+              searchCount++;
+              spinner = ui.spinner(`Researching... (${searchCount} searches)`);
+            } else if (event.tool === 'WebFetch' && event.query) {
+              spinner.stop();
+              const displayUrl = event.query.length > 60 ? event.query.slice(0, 60) + '...' : event.query;
+              ui.log(`  ${ui.colors.dim('Fetching:')} ${displayUrl}`);
+              spinner = ui.spinner('Analyzing website...');
+            } else if (event.type === 'result') {
+              spinner.text = 'Generating domain suggestions...';
+            } else if (event.tool === 'status') {
+              spinner.text = event.message || 'Thinking...';
+            }
+          },
         });
 
         spinner.stop();
@@ -991,6 +1009,8 @@ program
       const domains = await suggestDomainsWithAI(projectDescription);
       if (domains.length > 0) {
         await checkAndDisplayDomains(domains);
+      } else {
+        ui.warn('No domain suggestions were generated. Try a different description or use "Get more AI suggestions" below.');
       }
     }
 
@@ -1074,6 +1094,8 @@ program
         const domains = await suggestDomainsWithAI(projectDescription);
         if (domains.length > 0) {
           await checkAndDisplayDomains(domains);
+        } else {
+          ui.warn('No domain suggestions were generated. Try again or check a specific domain.');
         }
       }
     }

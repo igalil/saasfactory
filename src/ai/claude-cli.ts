@@ -69,7 +69,7 @@ interface StreamEvent {
       type: 'text' | 'tool_use' | 'tool_result';
       text?: string;
       name?: string;
-      input?: { query?: string };
+      input?: { query?: string; url?: string; prompt?: string; command?: string };
       content?: string;
     }>;
   };
@@ -314,21 +314,42 @@ export async function claudeGenerateWithProgress(
           try {
             const event = JSON.parse(trimmed) as StreamEvent;
 
-            // Handle WebSearch tool invocations
+            // Handle tool invocations (WebSearch, WebFetch, etc.)
             if (event.type === 'assistant' && event.message?.content) {
               for (const content of event.message.content) {
-                if (content.type === 'tool_use' && content.name === 'WebSearch') {
-                  searchCount++;
-                  options.onProgress?.({
-                    type: 'tool_use',
-                    tool: 'WebSearch',
-                    query: content.input?.query,
-                    message: content.input?.query
-                      ? `Searching: "${content.input.query}"`
-                      : `Web search #${searchCount}`,
-                    searchCount,
-                    totalSources: allSources.length,
-                  });
+                if (content.type === 'tool_use' && content.name) {
+                  if (content.name === 'WebSearch') {
+                    searchCount++;
+                    options.onProgress?.({
+                      type: 'tool_use',
+                      tool: 'WebSearch',
+                      query: content.input?.query,
+                      message: content.input?.query
+                        ? `Searching: "${content.input.query}"`
+                        : `Web search #${searchCount}`,
+                      searchCount,
+                      totalSources: allSources.length,
+                    });
+                  } else if (content.name === 'WebFetch') {
+                    options.onProgress?.({
+                      type: 'tool_use',
+                      tool: 'WebFetch',
+                      query: content.input?.url,
+                      message: content.input?.url
+                        ? `Fetching: ${content.input.url}`
+                        : 'Fetching website...',
+                      searchCount,
+                      totalSources: allSources.length,
+                    });
+                  } else {
+                    options.onProgress?.({
+                      type: 'tool_use',
+                      tool: content.name,
+                      message: `Using ${content.name}...`,
+                      searchCount,
+                      totalSources: allSources.length,
+                    });
+                  }
                 }
               }
             }
