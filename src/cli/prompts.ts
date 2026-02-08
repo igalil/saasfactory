@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 import path from 'path';
-import type { PricingType, SaasType, AnalyticsProvider, SaasIdea } from '../core/context.js';
+import type { SaasIdea } from '../core/context.js';
 import { formatIdeaForSelection } from '../ai/idea-report.js';
 import type { RefinedIdea } from '../ai/idea-refiner.js';
 import type { ProjectAnalysis, ProjectQuestion } from '../ai/project-analyzer.js';
@@ -12,13 +12,6 @@ export type IdeaMode = 'has_idea' | 'discover' | 'validate';
 export interface InitialPromptAnswers {
   projectName: string;
   description: string;
-}
-
-export interface FeaturePromptAnswers {
-  saasType: SaasType;
-  pricingType: PricingType;
-  features: string[];
-  analytics: AnalyticsProvider;
 }
 
 export interface BrandingPromptAnswers {
@@ -204,96 +197,6 @@ export async function promptDescription(canGoBack = false, initialValue?: string
   }
 }
 
-export async function promptFeatures(canGoBack = false): Promise<FeaturePromptAnswers | typeof GO_BACK_SECTION> {
-  let step = 0;
-  const answers: Partial<FeaturePromptAnswers> = {};
-
-  while (step < 4) {
-    if (step === 0) {
-      const saasType = await p.select({
-        message: 'What type of SaaS is this?',
-        options: [
-          { value: 'b2b', label: 'B2B', hint: 'Business to Business' },
-          { value: 'b2c', label: 'B2C', hint: 'Business to Consumer' },
-          { value: 'marketplace', label: 'Marketplace', hint: 'Two-sided platform' },
-          { value: 'tool', label: 'Tool', hint: 'Utility/Productivity' },
-        ],
-      });
-
-      const escAction = checkEscForBack(saasType);
-      if (escAction === 'hint') continue;
-      if (escAction === 'back') {
-        if (canGoBack) return GO_BACK_SECTION;
-        continue; // Can't go back further, re-ask
-      }
-
-      answers.saasType = saasType as SaasType;
-      step++;
-    } else if (step === 1) {
-      const pricingType = await p.select({
-        message: 'What is your pricing model?',
-        options: [
-          { value: 'freemium', label: 'Freemium', hint: 'Free tier + paid plans' },
-          { value: 'subscription', label: 'Subscription', hint: 'Monthly/yearly' },
-          { value: 'one-time', label: 'One-time', hint: 'Single payment' },
-          { value: 'usage-based', label: 'Usage-based', hint: 'Pay per use' },
-        ],
-      });
-
-      const escAction = checkEscForBack(pricingType);
-      if (escAction === 'hint') continue;
-      if (escAction === 'back') { step--; continue; }
-
-      answers.pricingType = pricingType as PricingType;
-      step++;
-    } else if (step === 2) {
-      const features = await p.multiselect({
-        message: 'Select additional features (space to toggle, enter to confirm):',
-        options: [
-          { value: 'waitlist', label: 'Waitlist / Early Access' },
-          { value: 'support-chat', label: 'Support Chat (Crisp)' },
-          { value: 'feature-flags', label: 'Feature Flags' },
-          { value: 'changelog', label: 'Changelog Page' },
-          { value: 'status-page', label: 'Status Page' },
-          { value: 'referral', label: 'Referral System' },
-          { value: 'multi-tenancy', label: 'Multi-tenancy' },
-          { value: 'api-docs', label: 'API Documentation' },
-          { value: 'i18n', label: 'i18n (Multi-language)' },
-          { value: 'ab-testing', label: 'A/B Testing' },
-          { value: 'onboarding', label: 'Onboarding Flow' },
-          { value: 'admin', label: 'Admin Dashboard' },
-        ],
-        required: false,
-      });
-
-      const escAction = checkEscForBack(features);
-      if (escAction === 'hint') continue;
-      if (escAction === 'back') { step--; continue; }
-
-      answers.features = (features as string[]) || [];
-      step++;
-    } else if (step === 3) {
-      const analytics = await p.select({
-        message: 'Which analytics provider?',
-        options: [
-          { value: 'posthog', label: 'PostHog', hint: 'Recommended' },
-          { value: 'plausible', label: 'Plausible', hint: 'Privacy-focused' },
-          { value: 'none', label: 'None' },
-        ],
-      });
-
-      const escAction = checkEscForBack(analytics);
-      if (escAction === 'hint') continue;
-      if (escAction === 'back') { step--; continue; }
-
-      answers.analytics = analytics as AnalyticsProvider;
-      step++;
-    }
-  }
-
-  return answers as FeaturePromptAnswers;
-}
-
 export async function promptBranding(canGoBack = false): Promise<BrandingPromptAnswers | typeof GO_BACK_SECTION> {
   let step = 0;
   const answers: Partial<BrandingPromptAnswers> = {};
@@ -377,13 +280,13 @@ export async function promptApiKeys(): Promise<Record<string, string>> {
     break;
   }
 
-  let openaiApiKey: string | symbol = '';
+  let googleApiKey: string | symbol = '';
   while (true) {
-    openaiApiKey = await p.password({
-      message: 'OpenAI API Key:',
+    googleApiKey = await p.password({
+      message: 'Google API Key:',
       mask: '*',
     });
-    const escAction = checkEscForBack(openaiApiKey);
+    const escAction = checkEscForBack(googleApiKey);
     if (escAction === 'hint' || escAction === 'back') continue;
     break;
   }
@@ -391,7 +294,7 @@ export async function promptApiKeys(): Promise<Record<string, string>> {
   return {
     githubToken: String(githubToken || ''),
     vercelToken: String(vercelToken || ''),
-    openaiApiKey: String(openaiApiKey || ''),
+    googleApiKey: String(googleApiKey || ''),
   };
 }
 

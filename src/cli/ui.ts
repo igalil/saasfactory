@@ -1,6 +1,8 @@
 import chalk from 'chalk';
 import ora, { type Ora } from 'ora';
 
+let bannerShown = false;
+
 // Color helpers (separate from ui object to avoid naming conflicts)
 export const colors = {
   primary: chalk.hex('#6366f1'),    // Indigo
@@ -17,8 +19,10 @@ export const ui = {
   // Color helpers accessible via ui.colors
   colors,
 
-  // Logo/Banner
+  // Logo/Banner (only shows once per process)
   banner(): void {
+    if (bannerShown) return;
+    bannerShown = true;
     console.log('');
     console.log(chalk.hex('#6366f1').bold('  ███████╗ █████╗  █████╗ ███████╗'));
     console.log(chalk.hex('#7c3aed').bold('  ██╔════╝██╔══██╗██╔══██╗██╔════╝'));

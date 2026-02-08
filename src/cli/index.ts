@@ -28,11 +28,10 @@ import {
   getConfigDir,
 } from '../core/config.js';
 import { claudeGenerate, isClaudeCodeAvailable, claudeFollowUp } from '../ai/claude-cli.js';
-import { conductMarketResearch } from '../ai/market-research.js';
-import { competeResearch } from '../ai/compete-research.js';
+import { conductResearch, getModeConfig, type ResearchMode } from '../ai/research.js';
 import { displayResearchSummary, generateResearchReport } from '../ai/research-report.js';
 import { discoverSaasIdeas, type DiscoveryProgressEvent } from '../ai/idea-discovery.js';
-import { displayIdeasList, displayIdeaDetails, displayDiscoverySummary } from '../ai/idea-report.js';
+import { displayIdeasList, displayIdeaDetails } from '../ai/idea-report.js';
 import { refineIdea, suggestProjectNames } from '../ai/idea-refiner.js';
 import { analyzeProject, type ProjectAnalysis } from '../ai/project-analyzer.js';
 import type { SaasIdea } from '../core/context.js';
@@ -84,7 +83,7 @@ program
     }
 
     // Granular state machine with back navigation at every step
-    // States: idea_mode → [discovery_sector → discovery_research → discovery_results → discovery_select] → name → description → idea_refinement → research_confirm → research → features → branding → ai_content → summary → generate
+    // States: idea_mode → [discovery flow | has_idea flow] → name → project_config → branding → ai_content → summary → project_location → generate
     type WizardState =
       | 'idea_mode'
       | 'discovery_sector'
@@ -331,8 +330,8 @@ program
           ui.success(`Selected: ${selectedIdea.name}`);
           ui.log('');
 
-          // Skip name and description, go directly to project config
-          wizardState = 'project_config';
+          // Let user confirm or change the project name
+          wizardState = 'name';
         } else {
           wizardState = 'discovery_select';
         }
@@ -359,15 +358,42 @@ program
         );
 
         if (result === GO_BACK_SECTION) {
-          // Go back to refinement (will redo name_research too)
-          wizardState = 'idea_refinement';
-          suggestedNames = [];
-          foundCompetitors = [];
+          if (ideaMode === 'discover' || ideaMode === 'validate') {
+            // Go back to idea selection in discovery flow
+            wizardState = 'discovery_results';
+          } else {
+            // Go back to refinement in has_idea flow
+            wizardState = 'idea_refinement';
+            suggestedNames = [];
+            foundCompetitors = [];
+          }
           continue;
         }
 
         projectName = result;
         context = createDefaultContext(projectName, description);
+
+        // Restore discovery data if coming from discovery flow
+        if (selectedIdea) {
+          context.discoveredIdea = selectedIdea;
+
+          // Restore saasType derived from target audience
+          const audienceLower = selectedIdea.targetAudience.join(' ').toLowerCase();
+          if (audienceLower.includes('business') || audienceLower.includes('team') || audienceLower.includes('enterprise')) {
+            context.saasType = 'b2b';
+          } else if (audienceLower.includes('developer') || audienceLower.includes('maker')) {
+            context.saasType = 'tool';
+          }
+
+          // Restore pricing from income model
+          if (selectedIdea.income.model === 'subscription') {
+            context.pricing.type = 'subscription';
+          } else if (selectedIdea.income.model === 'freemium') {
+            context.pricing.type = 'freemium';
+          } else if (selectedIdea.income.model === 'one-time') {
+            context.pricing.type = 'one-time';
+          }
+        }
 
         // Go to AI-driven project configuration
         wizardState = 'project_config';
@@ -462,109 +488,6 @@ program
 
         ui.log('');
         wizardState = 'name';
-
-      // ─────────────────────────────────────────────────────────────
-      // STATE: research_confirm
-      // ─────────────────────────────────────────────────────────────
-      } else if (wizardState === 'research_confirm') {
-        ui.heading('Market Research');
-        ui.info('AI can analyze the market, find competitors, and validate your idea.');
-        ui.info('This takes several minutes but helps you understand the competitive landscape.');
-        ui.log('');
-
-        const runResearch = await promptConfirm('Run market research?', true);
-
-        if (runResearch === GO_BACK_SECTION) {
-          wizardState = 'description';
-          continue;
-        }
-
-        wizardState = runResearch ? 'research' : 'features';
-
-      // ─────────────────────────────────────────────────────────────
-      // STATE: research
-      // ─────────────────────────────────────────────────────────────
-      } else if (wizardState === 'research') {
-        ui.log('');
-        let researchSpinner = ui.spinner('Starting research...');
-        let searchCount = 0;
-        let lastLoggedSourceCount = 0;
-        const sourcesFound: string[] = [];
-
-        const result = await conductMarketResearch(
-          description,
-          'b2b',
-          (event) => {
-            if (event.type === 'search') {
-              searchCount = event.count ?? searchCount + 1;
-              const query = event.query
-                ? `"${event.query.length > 40 ? event.query.slice(0, 40) + '...' : event.query}"`
-                : `#${searchCount}`;
-              researchSpinner.text = `Searching: ${query}`;
-            } else if (event.type === 'sources' && event.sources) {
-              for (const src of event.sources) {
-                if (!sourcesFound.includes(src)) sourcesFound.push(src);
-              }
-              const newSourceCount = sourcesFound.length - lastLoggedSourceCount;
-              if (newSourceCount >= 3) {
-                const recentSources = sourcesFound.slice(lastLoggedSourceCount, lastLoggedSourceCount + 3);
-                researchSpinner.stopAndPersist({ symbol: '  +', text: `Sources: ${recentSources.join(', ')}` });
-                lastLoggedSourceCount = sourcesFound.length;
-                researchSpinner = ui.spinner(`${sourcesFound.length} sources found...`);
-              } else {
-                researchSpinner.text = `${sourcesFound.length} sources found...`;
-              }
-            } else if (event.type === 'status') {
-              const elapsed = event.message.match(/\d+[ms]?\s*elapsed/)?.[0] || '';
-              if (searchCount > 0 || sourcesFound.length > 0) {
-                researchSpinner.text = `${searchCount} searches, ${sourcesFound.length} sources (${elapsed})`;
-              } else {
-                researchSpinner.text = event.message;
-              }
-            }
-          },
-        );
-
-        if (result) {
-          if (result.isFallback) {
-            researchSpinner.warn(`Market research incomplete: ${result.error}`);
-            ui.log('');
-            ui.info('Using placeholder data. You can research competitors manually.');
-          } else {
-            researchSpinner.succeed(`Market research complete (${searchCount} searches, ${result.research.competitors.length} competitors found)`);
-          }
-          ui.log('');
-          displayResearchSummary(result.research);
-          const reportPath = path.join(process.cwd(), `${projectName}-market-research.md`);
-          await generateResearchReport(result.research, reportPath, context.displayName);
-          ui.success(`Full report saved: ${reportPath}`);
-          ui.log('');
-          context.marketResearch = result.research;
-
-          if (!result.isFallback) {
-            if (result.research.marketValidation.verdict === 'saturated') {
-              ui.warn('Market appears saturated. Consider finding a unique angle.');
-            } else if (result.research.marketValidation.verdict === 'weak') {
-              ui.warn('Market opportunity appears weak. Consider validating demand first.');
-            }
-          }
-
-          if (!options?.yes) {
-            const proceed = await promptConfirm('Continue with project setup?', true);
-            if (proceed === GO_BACK_SECTION) {
-              wizardState = 'research_confirm';
-              continue;
-            }
-            if (!proceed) {
-              ui.log('');
-              ui.info('Project generation cancelled. Review the market research report.');
-              return;
-            }
-          }
-        } else {
-          researchSpinner.warn('Market research unavailable (Claude Code not found)');
-        }
-        wizardState = 'project_config';
 
       // ─────────────────────────────────────────────────────────────
       // STATE: project_config - AI-driven project configuration
@@ -854,7 +777,7 @@ program
       const updatedCreds = { ...credentials };
       if (newCreds['githubToken']) updatedCreds.githubToken = newCreds['githubToken'];
       if (newCreds['vercelToken']) updatedCreds.vercelToken = newCreds['vercelToken'];
-      if (newCreds['openaiApiKey']) updatedCreds.googleApiKey = newCreds['openaiApiKey'];
+      if (newCreds['googleApiKey']) updatedCreds.googleApiKey = newCreds['googleApiKey'];
 
       await saveCredentials(updatedCreds);
       ui.success('Credentials saved securely');
@@ -990,7 +913,9 @@ program
 program
   .command('compete <input>')
   .description('Research competitors for a SaaS idea or analyze a competitor URL')
-  .action(async (input: string) => {
+  .option('-q, --quick', 'Quick mode: find 3-5 competitors faster')
+  .option('-f, --full', 'Full mode: thorough analysis of 5-8 competitors')
+  .action(async (input: string, options?: { quick?: boolean; full?: boolean }) => {
     setupSignalHandlers();
     ui.banner();
 
@@ -1005,16 +930,49 @@ program
     // Detect input type
     const isUrl = input.startsWith('http://') || input.startsWith('https://');
 
+    // Determine research mode
+    let researchMode: ResearchMode;
+    if (isUrl) {
+      researchMode = 'url'; // URL mode auto-detected
+    } else if (options?.quick) {
+      researchMode = 'quick';
+    } else if (options?.full) {
+      researchMode = 'full';
+    } else {
+      // Ask user to select mode
+      const { select } = await import('@clack/prompts');
+      const modeSelection = await select({
+        message: 'Choose research depth:',
+        options: [
+          {
+            value: 'quick' as ResearchMode,
+            label: 'Quick (Recommended)',
+            hint: '3-5 competitors, ~3 minutes, fewer tokens',
+          },
+          {
+            value: 'full' as ResearchMode,
+            label: 'Full',
+            hint: '5-8 competitors, ~10 minutes, thorough analysis',
+          },
+        ],
+      });
+
+      if (typeof modeSelection !== 'string') {
+        return; // User cancelled
+      }
+      researchMode = modeSelection as ResearchMode;
+    }
+
+    const modeConfig = getModeConfig(researchMode);
+
     ui.heading('Competitive Research');
     if (isUrl) {
       ui.info(`Analyzing: ${input}`);
       ui.info('Will fetch the website, understand the product, and find competitors.');
     } else {
       ui.info(`Researching: "${input}"`);
-      ui.info('Will search for competitors and analyze the market.');
+      ui.info(`Mode: ${modeConfig.description} (${modeConfig.competitors} competitors)`);
     }
-    ui.log('');
-    ui.info('This may take several minutes for thorough research.');
     ui.log('');
 
     // Rich feedback during research
@@ -1024,51 +982,54 @@ program
     const foundSources: string[] = [];
     let currentPhase = 1;
 
-    const result = await competeResearch(input, (event) => {
-      if (event.type === 'analyzing') {
-        // Phase 1 for URLs: Fetching website
-        if (currentPhase === 1) {
-          spinner.text = 'Phase 1/3: Analyzing website...';
-        }
-      } else if (event.type === 'search') {
-        // Phase 2: Searching
-        if (currentPhase < 2) {
-          currentPhase = 2;
-          spinner.succeed('Phase 1/3: Website analyzed');
-          spinner = ui.spinner('Phase 2/3: Searching for competitors...');
-        }
-
-        searchCount = event.count ?? searchCount + 1;
-        if (event.query) {
-          // Log search query
-          spinner.stop();
-          ui.log(`  ${ui.colors.dim('Search:')} ${event.query.length > 60 ? event.query.slice(0, 60) + '...' : event.query}`);
-          spinner = ui.spinner(`Phase 2/3: Searching... (${searchCount} searches)`);
-        } else {
-          spinner.text = `Phase 2/3: Searching... (${searchCount} searches)`;
-        }
-      } else if (event.type === 'sources' && event.sources) {
-        // Show new sources found
-        const newSources = event.sources.filter(s => !foundSources.includes(s));
-        if (newSources.length > 0) {
-          foundSources.push(...newSources);
-          sourcesCount = foundSources.length;
-          spinner.stop();
-          ui.log(`  ${ui.colors.dim('Found:')} ${newSources.slice(0, 3).join(', ')}${newSources.length > 3 ? ` +${newSources.length - 3} more` : ''}`);
-          spinner = ui.spinner(`Phase 2/3: Searching... (${sourcesCount} sources)`);
-        }
-      } else if (event.type === 'status') {
-        // Phase 3: Analyzing results
-        if (event.message?.toLowerCase().includes('analy')) {
-          if (currentPhase < 3) {
-            currentPhase = 3;
-            spinner.succeed(`Phase 2/3: Found ${sourcesCount} sources from ${searchCount} searches`);
-            spinner = ui.spinner('Phase 3/3: Analyzing competitors...');
+    const result = await conductResearch(input, {
+      mode: researchMode,
+      onProgress: (event) => {
+        if (event.type === 'analyzing') {
+          // Phase 1 for URLs: Fetching website
+          if (currentPhase === 1) {
+            spinner.text = 'Phase 1/3: Analyzing website...';
           }
-        } else {
-          spinner.text = event.message;
+        } else if (event.type === 'search') {
+          // Phase 2: Searching
+          if (currentPhase < 2) {
+            currentPhase = 2;
+            spinner.succeed('Phase 1/3: Website analyzed');
+            spinner = ui.spinner('Phase 2/3: Searching for competitors...');
+          }
+
+          searchCount = event.count ?? searchCount + 1;
+          if (event.query) {
+            // Log search query
+            spinner.stop();
+            ui.log(`  ${ui.colors.dim('Search:')} ${event.query.length > 60 ? event.query.slice(0, 60) + '...' : event.query}`);
+            spinner = ui.spinner(`Phase 2/3: Searching... (${searchCount} searches)`);
+          } else {
+            spinner.text = `Phase 2/3: Searching... (${searchCount} searches)`;
+          }
+        } else if (event.type === 'sources' && event.sources) {
+          // Show new sources found
+          const newSources = event.sources.filter(s => !foundSources.includes(s));
+          if (newSources.length > 0) {
+            foundSources.push(...newSources);
+            sourcesCount = foundSources.length;
+            spinner.stop();
+            ui.log(`  ${ui.colors.dim('Found:')} ${newSources.slice(0, 3).join(', ')}${newSources.length > 3 ? ` +${newSources.length - 3} more` : ''}`);
+            spinner = ui.spinner(`Phase 2/3: Searching... (${sourcesCount} sources)`);
+          }
+        } else if (event.type === 'status') {
+          // Phase 3: Analyzing results
+          if (event.message?.toLowerCase().includes('analy')) {
+            if (currentPhase < 3) {
+              currentPhase = 3;
+              spinner.succeed(`Phase 2/3: Found ${sourcesCount} sources from ${searchCount} searches`);
+              spinner = ui.spinner('Phase 3/3: Analyzing competitors...');
+            }
+          } else {
+            spinner.text = event.message;
+          }
         }
-      }
+      },
     });
 
     if (!result) {
@@ -1089,21 +1050,67 @@ program
 
     // Follow-up question loop
     const sessionId = result.sessionId;
-    let askingFollowUps = true;
+    let pendingQuestion: string | null = null;
 
-    while (askingFollowUps) {
+    // Single loop: ask follow-ups, then offer to save
+    while (true) {
+      // If we have a pending question (from "Ask something else..." or "Ask another question"), process it
+      if (pendingQuestion && sessionId) {
+        let spinner = ui.spinner('Researching...');
+        try {
+          const answer = await claudeFollowUp(sessionId, pendingQuestion, {
+            allowedTools: ['WebSearch', 'WebFetch'],
+            timeout: 120000,
+            onProgress: (event) => {
+              if (event.tool === 'WebSearch' && event.query) {
+                spinner.stop();
+                ui.log(`  ${ui.colors.dim('Search:')} ${event.query.length > 60 ? event.query.slice(0, 60) + '...' : event.query}`);
+                spinner = ui.spinner(`Researching... (${event.searchCount} searches)`);
+              }
+            },
+          });
+          spinner.stop();
+
+          ui.log('');
+          ui.log(answer);
+          ui.log('');
+
+          // Ask if they want to continue or ask another question
+          const continueResult = await promptAfterFollowUp();
+          if (continueResult === GO_BACK_SECTION) {
+            return;
+          }
+          if (continueResult) {
+            // User wants to ask another question
+            const { text } = await import('@clack/prompts');
+            const nextQ = await text({
+              message: 'What would you like to know?',
+              placeholder: 'e.g., How does their pricing compare?',
+              validate: (value) => {
+                if (!value.trim()) return 'Please enter a question';
+              },
+            });
+            pendingQuestion = typeof nextQ === 'string' ? nextQ : null;
+            continue;
+          }
+          // User chose to continue - fall through to save prompt
+        } catch (error) {
+          spinner.fail('Failed to get answer');
+          ui.error(error instanceof Error ? error.message : String(error));
+        }
+        pendingQuestion = null;
+      }
+
+      // Save report prompt
       ui.log('');
       const promptResult = await promptWithFollowUp('Save report to file?');
 
       if (promptResult === GO_BACK_SECTION) {
-        // User cancelled, just exit
         return;
       }
 
       if (promptResult.type === 'answer') {
-        // User chose Yes or No
         if (promptResult.value) {
-          // Save report
           let filename: string;
           if (isUrl) {
             try {
@@ -1120,93 +1127,15 @@ program
           await generateResearchReport(result.research, reportPath, isUrl ? input : `"${input}"`);
           ui.success(`Report saved: ${reportPath}`);
         }
-        askingFollowUps = false;
+        break; // Done
+      }
 
-      } else if (promptResult.type === 'followUp') {
-        // User wants to ask a follow-up question
+      if (promptResult.type === 'followUp') {
         if (!sessionId) {
           ui.warn('Session not available for follow-up questions.');
           continue;
         }
-
-        let followUpSpinner = ui.spinner('Researching...');
-        try {
-          const answer = await claudeFollowUp(sessionId, promptResult.question, {
-            allowedTools: ['WebSearch', 'WebFetch'],
-            timeout: 120000, // 2 minutes for research questions
-            onProgress: (event) => {
-              if (event.tool === 'WebSearch' && event.query) {
-                followUpSpinner.stop();
-                ui.log(`  ${ui.colors.dim('Search:')} ${event.query.length > 60 ? event.query.slice(0, 60) + '...' : event.query}`);
-                followUpSpinner = ui.spinner(`Researching... (${event.searchCount} searches)`);
-              }
-            },
-          });
-          followUpSpinner.stop();
-
-          ui.log('');
-          ui.log(answer);
-          ui.log('');
-
-          // Ask if they want to continue or ask another question
-          const continueResult = await promptAfterFollowUp();
-          if (continueResult === GO_BACK_SECTION) {
-            return;
-          }
-          if (!continueResult) {
-            // User chose to continue - loop back to save prompt
-            continue;
-          }
-          // User wants to ask another question - stay in follow-up mode
-          while (true) {
-            const { text } = await import('@clack/prompts');
-            const nextQuestion = await text({
-              message: 'What would you like to know?',
-              placeholder: 'e.g., How does their pricing compare?',
-              validate: (value) => {
-                if (!value.trim()) return 'Please enter a question';
-              },
-            });
-
-            if (typeof nextQuestion !== 'string') {
-              // User cancelled
-              break;
-            }
-
-            let nextSpinner = ui.spinner('Researching...');
-            try {
-              const nextAnswer = await claudeFollowUp(sessionId, nextQuestion, {
-                allowedTools: ['WebSearch', 'WebFetch'],
-                timeout: 120000, // 2 minutes for research questions
-                onProgress: (event) => {
-                  if (event.tool === 'WebSearch' && event.query) {
-                    nextSpinner.stop();
-                    ui.log(`  ${ui.colors.dim('Search:')} ${event.query.length > 60 ? event.query.slice(0, 60) + '...' : event.query}`);
-                    nextSpinner = ui.spinner(`Researching... (${event.searchCount} searches)`);
-                  }
-                },
-              });
-              nextSpinner.stop();
-
-              ui.log('');
-              ui.log(nextAnswer);
-              ui.log('');
-
-              const nextContinue = await promptAfterFollowUp();
-              if (nextContinue === GO_BACK_SECTION || !nextContinue) {
-                break; // Back to save prompt
-              }
-              // Continue asking questions
-            } catch (error) {
-              nextSpinner.fail('Failed to get answer');
-              ui.error(error instanceof Error ? error.message : String(error));
-              break;
-            }
-          }
-        } catch (error) {
-          followUpSpinner.fail('Failed to get answer');
-          ui.error(error instanceof Error ? error.message : String(error));
-        }
+        pendingQuestion = promptResult.question;
       }
     }
   });

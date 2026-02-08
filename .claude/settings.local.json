@@ -45,7 +45,8 @@
       "Bash(~/.bun/bin/bunx:*)",
       "Bash(~/.bun/bin/bun:*)",
       "Bash(bun run build:*)",
-      "Bash(npx tsup:*)"
+      "Bash(npx tsup:*)",
+      "Bash(timeout 2 node:*)"
     ]
   }
 }
