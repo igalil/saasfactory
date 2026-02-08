@@ -25,7 +25,6 @@ export type UserConfig = z.infer<typeof UserConfigSchema>;
 const CredentialsSchema = z.object({
   githubToken: z.string().optional(),
   vercelToken: z.string().optional(),
-  googleApiKey: z.string().optional(),
 });
 
 export type Credentials = z.infer<typeof CredentialsSchema>;

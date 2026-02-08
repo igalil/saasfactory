@@ -761,12 +761,10 @@ program
     const credentials = await loadCredentials();
     const hasGithub = !!credentials.githubToken;
     const hasVercel = !!credentials.vercelToken;
-    const hasGoogle = !!credentials.googleApiKey;
 
     ui.subheading('Saved credentials:');
     ui.keyValue('GitHub Token', hasGithub ? '********' : 'Not set');
     ui.keyValue('Vercel Token', hasVercel ? '********' : 'Not set');
-    ui.keyValue('Google API Key', hasGoogle ? '********' : 'Not set');
     ui.log('');
 
     const updateCreds = await promptConfirm('Update credentials?');
@@ -777,7 +775,6 @@ program
       const updatedCreds = { ...credentials };
       if (newCreds['githubToken']) updatedCreds.githubToken = newCreds['githubToken'];
       if (newCreds['vercelToken']) updatedCreds.vercelToken = newCreds['vercelToken'];
-      if (newCreds['googleApiKey']) updatedCreds.googleApiKey = newCreds['googleApiKey'];
 
       await saveCredentials(updatedCreds);
       ui.success('Credentials saved securely');

@@ -2,9 +2,10 @@ import path from 'path';
 import fs from 'fs-extra';
 import type { ProjectContext } from '../../core/context.js';
 import { ensureDir } from '../../utils/file-system.js';
+import { claudeGenerate, isClaudeCodeAvailable } from '../../ai/claude-cli.js';
 
 /**
- * Generate assets (logo, favicon, OG images) using Google Imagen API
+ * Generate assets (logo, favicon, OG images) using Claude Code CLI
  */
 export async function generateAssets(
   context: ProjectContext,
@@ -12,7 +13,7 @@ export async function generateAssets(
 ): Promise<void> {
   await ensureDir(path.join(projectPath, 'public'));
 
-  // Generate logo using Google Imagen (Gemini)
+  // Generate logo using Claude Code CLI
   await generateLogo(context, projectPath);
 
   // Generate favicon from logo
@@ -29,29 +30,15 @@ async function generateLogo(
   context: ProjectContext,
   projectPath: string,
 ): Promise<void> {
-  const apiKey = process.env['GOOGLE_API_KEY'];
+  const hasAI = await isClaudeCodeAvailable();
 
-  if (!apiKey) {
-    // Generate placeholder SVG logo if no API key
+  if (!hasAI) {
     await generatePlaceholderLogo(context, projectPath);
     return;
   }
 
   try {
-    // Use Google Gemini 2.0 Flash for image generation
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `Generate a modern, minimalist logo for a SaaS company called "${context.displayName}".
+    const prompt = `Generate a modern, minimalist SVG logo for a SaaS company called "${context.displayName}".
 
 Description: ${context.description}
 Type: ${context.saasType}
@@ -63,41 +50,23 @@ Requirements:
 - Single color or simple gradient
 - No text in the logo, just an icon/symbol
 - Vector-style design
+- Must be a valid SVG with width="64" height="64" viewBox="0 0 64 64"
 
-Return the logo as an SVG.`,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 8192,
-          },
-        }),
-      }
-    );
+Return ONLY the raw SVG code, no markdown fences or explanation.`;
 
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.statusText}`);
-    }
-
-    const data = (await response.json()) as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
-      }>;
-    };
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const response = await claudeGenerate(prompt, {
+      timeout: 30000,
+      maxTurns: 1,
+    });
 
     // Extract SVG from response
-    const svgMatch = content?.match(/<svg[^>]*>[\s\S]*?<\/svg>/i);
+    const svgMatch = response.match(/<svg[^>]*>[\s\S]*?<\/svg>/i);
     if (svgMatch) {
       await fs.writeFile(path.join(projectPath, 'public', 'logo.svg'), svgMatch[0]);
     } else {
-      // Fallback to placeholder
       await generatePlaceholderLogo(context, projectPath);
     }
-  } catch (error) {
-    console.warn('Failed to generate logo with AI, using placeholder:', error);
+  } catch {
     await generatePlaceholderLogo(context, projectPath);
   }
 }

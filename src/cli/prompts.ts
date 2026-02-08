@@ -280,21 +280,9 @@ export async function promptApiKeys(): Promise<Record<string, string>> {
     break;
   }
 
-  let googleApiKey: string | symbol = '';
-  while (true) {
-    googleApiKey = await p.password({
-      message: 'Google API Key:',
-      mask: '*',
-    });
-    const escAction = checkEscForBack(googleApiKey);
-    if (escAction === 'hint' || escAction === 'back') continue;
-    break;
-  }
-
   return {
     githubToken: String(githubToken || ''),
     vercelToken: String(vercelToken || ''),
-    googleApiKey: String(googleApiKey || ''),
   };
 }
 
