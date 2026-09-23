@@ -62,7 +62,7 @@ export function formatError(error: unknown): {
   if (error instanceof SaasFactoryError) {
     return {
       message: error.message,
-      suggestion: error.suggestion,
+      ...(error.suggestion ? { suggestion: error.suggestion } : {}),
     };
   }
 

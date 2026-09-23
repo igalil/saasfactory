@@ -61,7 +61,7 @@ export async function checkDomainAvailability(
 
   const response = await fetch(
     `${VERCEL_API_BASE}/v1/registrar/domains/${encodeURIComponent(domain)}/availability`,
-    { headers },
+    { headers, signal: AbortSignal.timeout(12000) },
   );
 
   if (!response.ok) {
@@ -107,6 +107,7 @@ export async function checkBulkAvailability(
     `${VERCEL_API_BASE}/v1/registrar/domains/availability`,
     {
       method: 'POST',
+      signal: AbortSignal.timeout(12000),
       headers,
       body: JSON.stringify({ domains: batch }),
     },
@@ -136,7 +137,7 @@ export async function getDomainPrice(
   try {
     const response = await fetch(
       `${VERCEL_API_BASE}/v1/registrar/domains/${encodeURIComponent(domain)}/price`,
-      { headers },
+      { headers, signal: AbortSignal.timeout(12000) },
     );
 
     if (!response.ok) {

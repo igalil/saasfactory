@@ -4,6 +4,33 @@
  */
 import { claudeGenerateWithProgress, isClaudeCodeAvailable, type ProgressEvent } from './claude-cli.js';
 import type { MarketResearch } from '../core/context.js';
+import { z } from 'zod';
+
+const strings = z.array(z.string());
+const researchSchema = z.object({
+  ideaSummary: z.string().min(1),
+  marketValidation: z.object({
+    score: z.number().int().min(0).max(10),
+    verdict: z.enum(['strong', 'moderate', 'weak', 'saturated', 'unproven']),
+    reasoning: z.string().min(1),
+  }),
+  marketSize: z.string().optional(),
+  targetAudience: strings.default([]),
+  competitors: z.array(z.object({
+    name: z.string().min(1), url: z.string().url(), description: z.string(),
+    pricing: z.string().optional(), features: strings.default([]),
+    strengths: strings.default([]), weaknesses: strings.default([]),
+  })),
+  opportunities: strings.default([]), risks: strings.default([]),
+  featureIdeas: strings.default([]), recommendations: strings.default([]),
+});
+
+/** Older quick responses omit deep-analysis arrays; normalize those, not the evidence. */
+export function parseResearch(input: unknown): MarketResearch {
+  const parsed = researchSchema.parse(input);
+  return { ...parsed, ...(parsed.marketSize ? { marketSize: parsed.marketSize } : {}),
+    competitors: parsed.competitors.map(({ pricing, ...competitor }) => ({ ...competitor, ...(pricing ? { pricing } : {}) })) } as MarketResearch;
+}
 
 /**
  * Research modes with different depth/token usage
@@ -31,7 +58,7 @@ export interface ResearchProgressCallback {
 export interface ResearchResult {
   research: MarketResearch;
   isFallback: boolean;
-  sessionId?: string;
+  sessionId?: string | undefined;
   error?: string;
 }
 
@@ -40,7 +67,7 @@ export interface ResearchResult {
  */
 export interface ResearchOptions {
   mode: ResearchMode;
-  onProgress?: ResearchProgressCallback;
+  onProgress?: ResearchProgressCallback | undefined;
 }
 
 // Mode-specific configurations
@@ -260,8 +287,8 @@ function createFallbackResearch(input: string, mode: ResearchMode): MarketResear
   return {
     ideaSummary: isUrlInput ? `Analysis of ${input}` : input,
     marketValidation: {
-      score: 5,
-      verdict: 'moderate',
+      score: 0,
+      verdict: 'unproven',
       reasoning: 'Unable to conduct research. Consider researching competitors manually.',
     },
     targetAudience: ['Target audience to be determined'],
@@ -359,13 +386,12 @@ export async function conductResearch(
       return { research: fallback, isFallback: true, sessionId, error: 'Invalid AI response format' };
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as MarketResearch;
-
-    // Validate required fields
-    if (!parsed.marketValidation || !parsed.competitors) {
+    if (searchCount === 0) {
       const fallback = createFallbackResearch(input, mode);
-      return { research: fallback, isFallback: true, sessionId, error: 'Incomplete research data' };
+      return { research: fallback, isFallback: true, sessionId, error: 'No web search was observed; market research is unverified.' };
     }
+
+    const parsed = parseResearch(JSON.parse(jsonMatch[0]));
 
     return { research: parsed, isFallback: false, sessionId };
   } catch (error) {
@@ -405,6 +431,10 @@ export function shouldProceedWithIdea(research: MarketResearch): {
   reason: string;
 } {
   const { score, verdict } = research.marketValidation;
+
+  if (verdict === 'unproven') {
+    return { proceed: false, reason: 'Research is incomplete. There is no evidence-based recommendation yet.' };
+  }
 
   if (verdict === 'saturated') {
     return {

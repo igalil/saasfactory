@@ -5,15 +5,15 @@ export interface DiscoveryProgressEvent {
   type: 'search' | 'status' | 'sources' | 'phase';
   phase?: 'gaps' | 'competitors' | 'ideas' | 'difficulty' | 'marketing';
   message: string;
-  query?: string;
+  query?: string | undefined;
   sources?: string[];
   searchCount?: number;
   totalSources?: number;
 }
 
 export interface DiscoveryOptions {
-  sector?: string;
-  roughIdea?: string;
+  sector?: string | undefined;
+  roughIdea?: string | undefined;
   count?: number;
   onProgress?: (event: DiscoveryProgressEvent) => void;
 }
@@ -49,7 +49,7 @@ AVOID (don't recommend these):
 
 SEARCH STRATEGY:
 1. Search for pain points: "[sector] tool complaints reddit", "[profession] workflow frustrations"
-2. Search for gaps: "micro-saas ideas 2024", "[sector] underserved market"
+2. Search for gaps: "recent micro-saas pain points", "[sector] underserved market"
 3. Search for trending needs: "[sector] what tools missing", "indie hackers [sector] ideas"
 4. Validate: For each potential idea, search if solutions exist and identify gaps
 
@@ -218,7 +218,7 @@ IMPORTANT:
     });
 
     // Parse response - extract JSON more carefully
-    const parsed = extractJsonFromResponse(response);
+    const parsed = extractJsonFromResponse(response.result);
     if (!parsed) {
       return {
         ideas: createFallbackIdeas(),
@@ -328,7 +328,7 @@ function normalizeIdea(raw: RawSaasIdea, index: number): SaasIdea {
 
     difficulty: {
       score: difficultyScore,
-      label: (raw.difficulty?.label as DifficultyLabel) || difficultyLabels[difficultyScore],
+      label: (raw.difficulty?.label as DifficultyLabel) || difficultyLabels[difficultyScore] || 'moderate',
       reasoning: raw.difficulty?.reasoning || 'Difficulty assessment pending',
       estimatedHours: raw.difficulty?.estimatedHours || getDefaultHours(difficultyScore),
       aiStrengths: raw.difficulty?.aiStrengths || ['Standard patterns'],
@@ -338,19 +338,19 @@ function normalizeIdea(raw: RawSaasIdea, index: number): SaasIdea {
       primaryChannels: raw.marketing?.primaryChannels || ['To be researched'],
       launchStrategy: raw.marketing?.launchStrategy || 'Launch strategy pending',
       estimatedCost: costEstimate,
-      timeToFirstUsers: raw.marketing?.timeToFirstUsers || '2-4 weeks',
+      timeToFirstUsers: raw.marketing?.timeToFirstUsers || 'Not assessed',
       tactics: (raw.marketing?.tactics || []).map(t => ({
         channel: t.channel || 'Unknown',
         approach: t.approach || 'Approach TBD',
-        expectedOutcome: t.expectedOutcome,
+        ...(t.expectedOutcome ? { expectedOutcome: t.expectedOutcome } : {}),
       })),
     },
 
     income: {
       model: incomeModel,
-      suggestedPricing: raw.income?.suggestedPricing || '$9-29/month',
-      monthlyPotential: raw.income?.monthlyPotential || '$500-2000/month',
-      timeToFirstRevenue: raw.income?.timeToFirstRevenue,
+      suggestedPricing: raw.income?.suggestedPricing || 'Not assessed',
+      monthlyPotential: raw.income?.monthlyPotential || 'Not assessed',
+      ...(raw.income?.timeToFirstRevenue ? { timeToFirstRevenue: raw.income.timeToFirstRevenue } : {}),
     },
 
     sources: raw.sources || [],
@@ -405,7 +405,7 @@ function extractJsonFromResponse(response: string): { ideas: RawSaasIdea[] } | n
   const codeBlockMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlockMatch) {
     try {
-      return JSON.parse(codeBlockMatch[1].trim());
+      return JSON.parse(codeBlockMatch[1]!.trim());
     } catch {
       // Continue to next strategy
     }
@@ -478,85 +478,7 @@ function extractJsonFromResponse(response: string): { ideas: RawSaasIdea[] } | n
  * Create fallback ideas when AI fails
  */
 function createFallbackIdeas(): SaasIdea[] {
-  return [
-    {
-      id: 'fallback-1',
-      name: 'WaitlistKit',
-      tagline: 'Launch a waitlist in 5 minutes',
-      description: 'Simple waitlist builder for pre-launch products. Collect emails, show position, referral bonuses.',
-      problemSolved: 'Founders need to validate ideas before building, but setting up waitlists is tedious',
-      targetAudience: ['Indie hackers', 'Startup founders', 'Product managers'],
-      coreFeatures: ['Email collection', 'Referral tracking', 'Embeddable widget'],
-      marketOpportunity: {
-        score: 7,
-        verdict: 'moderate',
-        reasoning: 'Proven demand - competitors like LaunchList exist but leave room for simpler alternatives',
-        competitors: ['LaunchList', 'Waitlist.me'],
-        gap: 'Most solutions are overpriced or overcomplicated for simple use cases',
-      },
-      difficulty: {
-        score: 2,
-        label: 'easy',
-        reasoning: 'Simple CRUD with email collection and counter logic',
-        estimatedHours: '4-6 hours',
-        aiStrengths: ['Standard form handling', 'Simple database schema', 'Embeddable components'],
-      },
-      marketing: {
-        primaryChannels: ['r/SideProject', 'IndieHackers', 'Product Hunt'],
-        launchStrategy: 'Build in public on Twitter, launch on Product Hunt, post in founder communities',
-        estimatedCost: 'free',
-        timeToFirstUsers: '1-2 weeks',
-        tactics: [
-          { channel: 'IndieHackers', approach: 'Share building journey, offer early access' },
-          { channel: 'Product Hunt', approach: 'Launch with maker story' },
-        ],
-      },
-      income: {
-        model: 'freemium',
-        suggestedPricing: '$0 free (100 signups) / $9/mo pro',
-        monthlyPotential: '$500-1500/month',
-      },
-      sources: [],
-    },
-    {
-      id: 'fallback-2',
-      name: 'FeedbackDrop',
-      tagline: 'Collect user feedback without leaving your app',
-      description: 'Lightweight feedback widget for web apps. Screenshot capture, categorization, Slack notifications.',
-      problemSolved: 'Developers lose valuable feedback because users won\'t switch to external tools',
-      targetAudience: ['SaaS developers', 'Product teams', 'Indie makers'],
-      coreFeatures: ['Embedded widget', 'Screenshot capture', 'Slack integration'],
-      marketOpportunity: {
-        score: 6,
-        verdict: 'moderate',
-        reasoning: 'Canny and similar tools are expensive. Room for lightweight alternative.',
-        competitors: ['Canny', 'UserVoice'],
-        gap: 'Simple, affordable option for small teams',
-      },
-      difficulty: {
-        score: 3,
-        label: 'moderate',
-        reasoning: 'Widget embedding and screenshot capture add some complexity',
-        estimatedHours: '1-2 days',
-        aiStrengths: ['React components', 'API integration', 'Webhook handling'],
-      },
-      marketing: {
-        primaryChannels: ['r/webdev', 'HackerNews', 'Dev.to'],
-        launchStrategy: 'Write technical blog posts about building feedback systems',
-        estimatedCost: 'free',
-        timeToFirstUsers: '2-4 weeks',
-        tactics: [
-          { channel: 'Dev.to', approach: 'Technical tutorials on feedback collection' },
-        ],
-      },
-      income: {
-        model: 'freemium',
-        suggestedPricing: '$0 free / $19/mo pro',
-        monthlyPotential: '$1000-3000/month',
-      },
-      sources: [],
-    },
-  ];
+  return []; // Failed research must not be replaced with invented opportunities.
 }
 
 /**

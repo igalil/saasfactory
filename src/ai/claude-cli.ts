@@ -36,7 +36,7 @@ export function getActiveProcessCount(): number {
 export interface ClaudeOptions {
   outputFormat?: 'text' | 'json' | 'stream-json';
   systemPrompt?: string;
-  allowedTools?: string[];
+  allowedTools?: string[] | undefined;
   maxTurns?: number;
   resume?: string;
   timeout?: number;
@@ -47,7 +47,7 @@ export interface ProgressEvent {
   type: 'tool_use' | 'text' | 'result';
   tool?: string;
   message?: string;
-  query?: string;
+  query?: string | undefined;
   sources?: string[];
   searchCount?: number;
   totalSources?: number;
@@ -58,7 +58,7 @@ export interface ProgressEvent {
  */
 export interface ClaudeResult {
   result: string;
-  sessionId?: string;
+  sessionId?: string | undefined;
 }
 
 interface StreamEvent {
@@ -69,14 +69,14 @@ interface StreamEvent {
       type: 'text' | 'tool_use' | 'tool_result';
       text?: string;
       name?: string;
-      input?: { query?: string; url?: string; prompt?: string; command?: string };
+      input?: { query?: string | undefined; url?: string; prompt?: string; command?: string };
       content?: string;
     }>;
   };
   result?: string;
   // Tool result with structured data (at root level for 'user' type)
   tool_use_result?: {
-    query?: string;
+    query?: string | undefined;
     results?: Array<{
       content?: Array<{ url?: string; title?: string }>;
     }>;
@@ -256,6 +256,7 @@ export async function claudeGenerateWithProgress(
   let finalResult = '';
   let sessionId: string | undefined;
   let buffer = '';
+  let statusInterval: ReturnType<typeof setInterval> | undefined;
 
   try {
     // Use spawn to get real-time streaming (execa v9 buffers by default)
@@ -263,7 +264,7 @@ export async function claudeGenerateWithProgress(
 
     // Periodic fallback status update (in case stream events are slow)
     // Created inside try block to avoid leaking interval if spawn fails
-    const statusInterval = setInterval(() => {
+    statusInterval = setInterval(() => {
       options.onProgress?.({
         type: 'tool_use',
         tool: 'status',
@@ -456,7 +457,7 @@ export async function claudeGenerateWithProgress(
         const lines = stdout.trim().split('\n');
         for (let i = lines.length - 1; i >= 0; i--) {
           try {
-            const event = JSON.parse(lines[i]) as StreamEvent;
+            const event = JSON.parse(lines[i]!) as StreamEvent;
             if (event.session_id) {
               sessionId = event.session_id;
             }
@@ -664,7 +665,7 @@ Summarize findings in clear paragraphs with bullet points where helpful.`;
         const lines = stdout.trim().split('\n');
         for (let i = lines.length - 1; i >= 0; i--) {
           try {
-            const event = JSON.parse(lines[i]) as StreamEvent;
+            const event = JSON.parse(lines[i]!) as StreamEvent;
             if (event.type === 'result' && event.result) {
               resolve(event.result);
               return;

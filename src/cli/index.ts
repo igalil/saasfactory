@@ -48,7 +48,7 @@ const program = new Command();
 
 program
   .name('saasfactory')
-  .description('Generate production-ready SaaS projects with AI')
+  .description('Generate SaaS starter projects with AI')
   .version(version);
 
 // Main interactive command
@@ -244,7 +244,7 @@ program
         if (result.isFallback) {
           researchSpinner.warn(`Discovery incomplete: ${result.error}`);
           ui.log('');
-          ui.info('Using example ideas. You can research opportunities manually.');
+          ui.info('No validated ideas were returned. Try again or enter an idea yourself.');
         } else {
           researchSpinner.succeed(`Discovery complete! Found ${result.ideas.length} ideas (${searchCount} searches, ${sourcesCount} sources)`);
         }
@@ -539,7 +539,7 @@ program
 
         brandingAnswers = result;
 
-        if (brandingAnswers && brandingAnswers !== GO_BACK_SECTION) {
+        if (brandingAnswers) {
           context.domain = brandingAnswers.domain;
           if (brandingAnswers.tagline) {
             context.content.tagline = brandingAnswers.tagline;
@@ -943,7 +943,7 @@ program
             availableDomains.map(d => getDomainPrice(d)),
           );
           availableDomains.forEach((d, i) => {
-            priceMap.set(d, prices[i]);
+            priceMap.set(d, prices[i] ?? null);
           });
         }
 

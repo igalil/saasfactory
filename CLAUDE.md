@@ -1,125 +1,34 @@
-# SaasFactory
+# SaasFactory contributor context
 
-CLI tool that generates production-ready SaaS projects with AI assistance.
+SaasFactory is now a local desktop idea-capture and validation app, alongside its original Claude-powered SaaS-generation CLI. Read README.md and ARCHITECTURE.md before changing behavior.
 
-## Tech Stack
+## Runtime and commands
 
-- **Runtime**: Node.js with TypeScript (ESM)
-- **Build**: tsup
-- **CLI**: Commander.js + @clack/prompts
-- **AI**: Claude Code CLI (not direct API)
-- **Database**: Convex (generated projects)
-- **Auth**: Clerk (generated projects)
-- **Payments**: Stripe (generated projects)
+- ESM TypeScript, Bun 1.3+ package management, Node 24+ for development.
+- Desktop: Electron + React + Vite. `bun run desktop:dev`, `bun run desktop:build`, `bun run desktop:start`.
+- CLI: Commander + @clack/prompts + EJS + tsup. `bun run dev`, `bun run build`.
+- Verification: `bun run typecheck`, `bun run test:run`, `bun run test:e2e` (installed Chrome and Electron).
 
-## Project Structure
+## Product invariants
 
-```
-src/
-├── cli/           # CLI interface
-│   ├── index.ts   # Main wizard state machine (17 states)
-│   ├── prompts.ts # User input prompts
-│   └── ui.ts      # Terminal UI helpers
-├── ai/            # AI features (all use Claude Code CLI)
-│   ├── claude-cli.ts        # Claude Code wrapper
-│   ├── idea-discovery.ts    # Discover SaaS ideas (WebSearch)
-│   ├── idea-refiner.ts      # Refine descriptions + suggest names
-│   ├── research.ts          # Unified competitive research (quick/full/url modes)
-│   ├── project-analyzer.ts  # AI-driven project configuration
-│   ├── idea-report.ts       # Display ideas
-│   └── research-report.ts   # Display research
-├── core/          # Core logic
-│   ├── context.ts   # Project context types
-│   ├── generator.ts # Project file generation
-│   └── config.ts    # User config/credentials
-└── integrations/  # External services
-    ├── git.ts
-    ├── github.ts
-    ├── vercel.ts
-    └── domain.ts
-```
+- Capture is local and starts no analysis by default. Automatic quick checks are explicitly opt-in. Deep research and challenges are always deliberate.
+- Quick desktop checks do not browse and are labeled low-confidence first impressions. The older CLI's quick competition mode does browse.
+- Codex task defaults: Luna/High quick checks, Sol/Medium research, Astra/High challenges. Honor saved per-task overrides; do not silently fall back to another model. Challenges require a current-version report and preserve it in history.
+- Never fabricate successful research, sample ideas, availability, revenue forecasts, or market validation when a provider fails.
+- Scores are directional ratings, never probabilities of business success. Reports retain the exact input version.
+- Use official supported subscription/account SDK routes. No fallback to metered model API keys. Provider-controlled limits and enabled overages still apply.
+- Keep provider credentials in the main process/provider stores, never the renderer or exported backups.
+- Grok/SpaceXAI has no verified consumer-subscription route here; keep it unavailable unless official support is established.
+- Preserve existing CLI capabilities without conflating generation or deployment with idea capture. Generated templates require further review; do not describe them as production-ready.
 
-## Wizard State Diagram
+## Code map
 
-```
-                         START
-                           │
-              ┌────────────┴────────────┐
-              ▼                         ▼
-        [idea_mode]              [description]  (if name passed via CLI)
-              │
-    ┌─────────┼─────────┐
-    ▼         ▼         ▼
- has_idea  discover  validate
-    │         │         │
-    │         │    [discovery_rough_idea]
-    │         │         │
-    │    [discovery_sector] ◄───┘
-    │         │
-    │    [discovery_research]  ◄─┐
-    │      (AI: 5-8 min)         │
-    │         │                  │
-    │    [discovery_results]     │
-    │         │                  │
-    │    [discovery_select]──────┘
-    │         │
-    │    [discovery_confirm]
-    │         │
-    │         └──────────────┐
-    │                        │
-    ▼                        ▼
- [description]            [name]
-    │                        │
- [idea_refinement] (~15s)    │
-    │                        │
- [name_research] (AI: ~2m)  │
-    │                        │
-    └────►[name]◄────────────┘
-              │
-       [project_config]  (AI: ~15s)
-              │
-         [branding] → [ai_content] → [summary] → [project_location] → [generate]
-                        (AI: ~30s)
-```
+- `src/desktop/shared.ts`: validated contracts and report selection.
+- `src/desktop/{service,store}.ts`: lifecycle, concurrency, limits, persistence, recovery.
+- `src/desktop/{providers,analysis,model-routing}.ts`: SDKs, authentication, prompts, honest evidence handling.
+- `src/desktop/{main,preload}.ts`: native lifecycle and restricted IPC.
+- `src/desktop/{domains,voice,export}.ts`: names/registrar, local transcription, Markdown.
+- `desktop/src/{App.tsx,styles.css,api.ts}`: desktop UI and explicitly limited browser preview.
+- `src/cli/`, `src/ai/`, `src/core/`, `src/integrations/`, `src/modules/`: preserved CLI.
 
-## AI/LLM Usage
-
-**Provider**: Claude Code CLI only (no direct API calls)
-
-| Feature | Function | Tools | Duration |
-|---------|----------|-------|----------|
-| Idea Discovery | `discoverSaasIdeas()` | WebSearch | 5-8 min |
-| Idea Refinement | `refineIdea()` | None | ~15 sec |
-| Name Suggestions | `suggestProjectNames()` | WebSearch | ~2 min |
-| Competition Research (quick) | `conductResearch(input, {mode:'quick'})` | WebSearch | ~3 min |
-| Competition Research (full) | `conductResearch(input, {mode:'full'})` | WebSearch | ~10 min |
-| Competition Research (URL) | `conductResearch(url, {mode:'url'})` | WebSearch, WebFetch | ~10 min |
-| Project Analysis | `analyzeProject()` | None | ~15 sec |
-| Content Generation | `claudeGenerate()` | None | ~30 sec |
-| Domain Suggestions | `claudeGenerate()` (domain cmd) | WebSearch, WebFetch (URL) or None | ~15-30 sec |
-
-All AI features degrade gracefully if Claude Code unavailable.
-
-## Key Files
-
-- **State machine**: `src/cli/index.ts` (WizardState type, 17 states)
-- **Claude wrapper**: `src/ai/claude-cli.ts`
-- **Unified research**: `src/ai/research.ts` (quick/full/url modes)
-- **Types**: `src/core/context.ts` (SaasIdea, MarketResearch, etc.)
-
-## Commands
-
-```bash
-bun run build    # Build with tsup
-bun run dev      # Development mode
-bun link         # Link CLI globally
-saasfactory create [name]    # Main wizard
-saasfactory config           # Configure credentials
-saasfactory domain [name]    # AI domain suggestions + availability check (Vercel)
-saasfactory compete <input>  # Research competitors (idea or URL)
-```
-
-## Runtime
-
-- **Package Manager**: Bun (>= 1.0.0)
-- **Lockfile**: `bun.lock` (text-based, Bun 1.3+)
+See docs/PROVIDERS.md for verified official policy sources and docs/LEGACY_AUDIT.md for old template limitations. Update docs when contracts, setup, or provider behavior changes.

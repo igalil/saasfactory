@@ -63,7 +63,7 @@ function createFallback(error?: string): ProjectAnalysis {
     ],
     questions: [],
     success: false,
-    error,
+    ...(error ? { error } : {}),
   };
 }
 
@@ -71,7 +71,7 @@ function createFallback(error?: string): ProjectAnalysis {
  * Analyze a project idea and generate relevant questions/options
  */
 export async function analyzeProject(ideaDescription: string): Promise<ProjectAnalysis> {
-  const debug = process.env.DEBUG_ANALYZER === '1';
+  const debug = process.env['DEBUG_ANALYZER'] === '1';
 
   if (!await isClaudeCodeAvailable()) {
     if (debug) console.error('[analyzeProject] Claude Code not available');

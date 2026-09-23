@@ -82,7 +82,7 @@ function createRefinementFallback(rawIdea: string, error?: string): IdeaRefineme
   return {
     versions: [{ summary: rawIdea, keyFeatures: [], targetAudience: 'To be determined' }],
     success: false,
-    error,
+    ...(error ? { error } : {}),
   };
 }
 
@@ -91,7 +91,7 @@ function createNameFallback(error?: string): NameSuggestionResult {
     competitors: [],
     suggestedNames: [],
     success: false,
-    error,
+    ...(error ? { error } : {}),
   };
 }
 
@@ -99,7 +99,7 @@ function createNameFallback(error?: string): NameSuggestionResult {
  * Refine a raw user idea into 2-3 polished versions (quick, no web search)
  */
 export async function refineIdea(rawIdea: string): Promise<IdeaRefinementResult> {
-  const debug = process.env.DEBUG_REFINE === '1';
+  const debug = process.env['DEBUG_REFINE'] === '1';
 
   if (!await isClaudeCodeAvailable()) {
     if (debug) console.error('[refineIdea] Claude Code not available');
@@ -141,7 +141,7 @@ export async function refineIdea(rawIdea: string): Promise<IdeaRefinementResult>
  * Search for competitors and suggest project names based on the finalized idea
  */
 export async function suggestProjectNames(ideaDescription: string): Promise<NameSuggestionResult> {
-  const debug = process.env.DEBUG_REFINE === '1';
+  const debug = process.env['DEBUG_REFINE'] === '1';
 
   if (!await isClaudeCodeAvailable()) {
     if (debug) console.error('[suggestNames] Claude Code not available');

@@ -148,7 +148,7 @@ export async function promptName(
     const projectName = await p.text({
       message: 'What is your project name?',
       placeholder: 'my-saas-app',
-      initialValue,
+      ...(initialValue !== undefined ? { initialValue } : {}),
       validate: (value) => {
         if (!value.trim()) return 'Project name is required';
         const sanitized = sanitizeProjectName(value);
@@ -179,7 +179,7 @@ export async function promptDescription(canGoBack = false, initialValue?: string
     const descText = await p.text({
       message: 'Describe your SaaS idea:',
       placeholder: 'A platform that helps users...',
-      initialValue,
+      ...(initialValue !== undefined ? { initialValue } : {}),
       validate: (value) => {
         if (!value.trim()) return 'Please describe your SaaS idea';
         if (value.length < 20) return 'Please provide more detail (at least 20 characters)';
@@ -206,7 +206,7 @@ export async function promptBranding(canGoBack = false): Promise<BrandingPromptA
       const domain = await p.text({
         message: 'Preferred domain (without .com):',
         placeholder: 'myapp',
-        initialValue: answers.domain,
+        ...(answers.domain !== undefined ? { initialValue: answers.domain } : {}),
       });
 
       const escAction = checkEscForBack(domain);
@@ -222,7 +222,7 @@ export async function promptBranding(canGoBack = false): Promise<BrandingPromptA
       const tagline = await p.text({
         message: 'Tagline for your SaaS (optional):',
         placeholder: 'The easiest way to...',
-        initialValue: answers.tagline,
+        ...(answers.tagline !== undefined ? { initialValue: answers.tagline } : {}),
       });
 
       const escAction = checkEscForBack(tagline);
@@ -520,9 +520,9 @@ export async function promptIdeaRefinement(
     // Parse selection index
     const match = String(selection).match(/^idea_(\d+)$/);
     if (match) {
-      const index = parseInt(match[1], 10);
+      const index = parseInt(match[1]!, 10);
       if (index >= 0 && index < refinedIdeas.length) {
-        return { type: 'selected', idea: refinedIdeas[index] };
+        return { type: 'selected', idea: refinedIdeas[index]! };
       }
     }
 

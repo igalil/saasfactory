@@ -34,7 +34,7 @@ export interface FAQItem {
 }
 
 // Market Research Types
-export type MarketVerdict = 'strong' | 'moderate' | 'weak' | 'saturated';
+export type MarketVerdict = 'strong' | 'moderate' | 'weak' | 'saturated' | 'unproven';
 
 // Idea Discovery Types
 export type DifficultyLabel = 'trivial' | 'easy' | 'moderate' | 'challenging' | 'complex';
@@ -295,8 +295,8 @@ export const ProjectContextSchema = z.object({
   marketResearch: z.object({
     ideaSummary: z.string(),
     marketValidation: z.object({
-      score: z.number().min(1).max(10),
-      verdict: z.enum(['strong', 'moderate', 'weak', 'saturated']),
+      score: z.number().min(0).max(10),
+      verdict: z.enum(['strong', 'moderate', 'weak', 'saturated', 'unproven']),
       reasoning: z.string(),
     }),
     marketSize: z.string().optional(),

@@ -38,7 +38,7 @@ export const ui = {
     console.log(chalk.hex('#c4b5fd').bold('  ██║     ██║  ██║╚██████╗   ██║   ╚██████╔╝██║  ██║   ██║   '));
     console.log(chalk.hex('#ddd6fe').bold('  ╚═╝     ╚═╝  ╚═╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝   ╚═╝   '));
     console.log('');
-    console.log(chalk.dim('  Generate production-ready SaaS projects with AI'));
+    console.log(chalk.dim('  Generate SaaS starter projects with AI'));
     console.log('');
   },
 

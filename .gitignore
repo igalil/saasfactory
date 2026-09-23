@@ -6,3 +6,7 @@ dist/
 .DS_Store
 .vite/
 coverage/
+dist-desktop/
+release/
+playwright-report/
+test-results/

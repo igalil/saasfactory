@@ -1,0 +1,31 @@
+appId: com.saasfactory.desktop
+productName: SaasFactory
+asar: true
+directories:
+  output: release
+files:
+  - dist-desktop/**/*
+  - assets/**/*
+  - package.json
+extraMetadata:
+  main: dist-desktop/main/main.js
+asarUnpack:
+  - node_modules/@cursor/**/*
+  - node_modules/@anthropic-ai/**/*
+  - node_modules/@openai/**/*
+mac:
+  category: public.app-category.productivity
+  target: [dmg, zip]
+  icon: assets/icon.png
+  extendInfo:
+    NSMicrophoneUsageDescription: Record an idea and transcribe it locally on your device.
+win:
+  target: [nsis]
+  icon: assets/icon.png
+linux:
+  target: [AppImage, deb]
+  category: Utility
+  icon: assets/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
