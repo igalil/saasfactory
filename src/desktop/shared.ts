@@ -223,6 +223,19 @@ export type ProviderStatus = {
   detail: string;
 };
 export type WindowMode = "island" | "capture" | "workspace";
+export const WindowPointSchema = z
+  .object({
+    x: z.number().finite().min(-1_000_000).max(1_000_000),
+    y: z.number().finite().min(-1_000_000).max(1_000_000),
+  })
+  .strict();
+export type WindowPoint = z.infer<typeof WindowPointSchema>;
+export type WindowState = {
+  mode: WindowMode;
+  edge: "left" | "right";
+  focused: boolean;
+  dragging: boolean;
+};
 export interface DesktopAPI {
   snapshot(): Promise<Library>;
   capture(input: z.infer<typeof CaptureSchema>): Promise<Idea>;
@@ -239,13 +252,18 @@ export interface DesktopAPI {
   backup(): Promise<string | null>;
   restore(): Promise<number | null>;
   setWindow(mode: WindowMode): Promise<void>;
+  windowState(): Promise<WindowState>;
+  beginWindowDrag(point: WindowPoint): Promise<void>;
+  moveWindowDrag(point: WindowPoint): Promise<void>;
+  endWindowDrag(point?: WindowPoint): Promise<boolean>;
+  nudgeWindow(direction: "up" | "down" | "left" | "right"): Promise<void>;
   openExternal(url: string): Promise<void>;
   transcribe(audio: ArrayBuffer): Promise<string>;
   chooseVoiceFile(
     kind: "modelPath" | "whisperPath" | "ffmpegPath",
   ): Promise<string | null>;
   subscribe(listener: () => void): () => void;
-  onWindow(listener: (mode: WindowMode) => void): () => void;
+  onWindow(listener: (state: WindowState) => void): () => void;
   platform: string;
 }
 

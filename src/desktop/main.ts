@@ -20,9 +20,15 @@ import { z } from "zod";
 import { LibraryStore } from "./store.js";
 import { IdeaService } from "./service.js";
 import { SubscriptionProviders } from "./providers.js";
-import { ProviderId, WebUrl, type WindowMode } from "./shared.js";
+import {
+  ProviderId,
+  WebUrl,
+  WindowPointSchema,
+  type WindowMode,
+} from "./shared.js";
 import { exportMarkdown } from "./export.js";
 import { transcribeLocally } from "./voice.js";
+import { WindowController } from "./window-controller.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const renderer = path.join(root, "../renderer/index.html");
@@ -36,7 +42,7 @@ if (process.env["SAASFACTORY_DATA_DIR"] && !app.isPackaged)
 app.setName("SaasFactory");
 let window: BrowserWindow;
 let tray: Tray;
-let mode: WindowMode = "island";
+let windowController: WindowController;
 let quitting = false;
 let service: IdeaService;
 let speech: AbortController | undefined;
@@ -45,30 +51,8 @@ const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
 
 function setMode(next: WindowMode) {
-  mode = next;
-  const display = screen.getDisplayMatching(window.getBounds());
-  const work = display.workArea;
-  const desired =
-    next === "island"
-      ? { width: 64, height: 172 }
-      : next === "capture"
-        ? { width: 450, height: 660 }
-        : { width: 1180, height: 820 };
-  const width = Math.min(work.width - 20, desired.width);
-  const height = Math.min(work.height - 20, desired.height);
-  window.setBounds(
-    {
-      x: work.x + work.width - width - 10,
-      y: work.y + Math.round((work.height - height) / 2),
-      width,
-      height,
-    },
-    true,
-  );
-  window.setAlwaysOnTop(next !== "workspace", "floating");
-  window.webContents.send("window:changed", mode);
-  window.show();
-  if (next !== "island") window.focus();
+  if (quitting || window?.isDestroyed()) return;
+  windowController.setMode(next);
 }
 
 function trusted(url: string): boolean {
@@ -121,6 +105,21 @@ function registerHandlers(providers: SubscriptionProviders) {
   handle("idea:domains", (id, names) => service.domains(id, names));
   handle("window:mode", (input) =>
     setMode(z.enum(["island", "capture", "workspace"]).parse(input)),
+  );
+  handle("window:state", () => windowController.state());
+  handle("window:drag-start", (input) =>
+    windowController.beginDrag(WindowPointSchema.parse(input)),
+  );
+  handle("window:drag-move", (input) =>
+    windowController.moveDrag(WindowPointSchema.parse(input)),
+  );
+  handle("window:drag-end", (input) =>
+    windowController.endDrag(WindowPointSchema.optional().parse(input)),
+  );
+  handle("window:nudge", (input) =>
+    windowController.nudge(
+      z.enum(["up", "down", "left", "right"]).parse(input),
+    ),
   );
   handle("link:open", (input) => shell.openExternal(WebUrl.parse(input)));
   handle("idea:export", async (input) => {
@@ -209,6 +208,7 @@ if (singleInstance)
         hasShadow: false,
         show: false,
         skipTaskbar: true,
+        acceptFirstMouse: true,
         backgroundColor: "#00000000",
         webPreferences: {
           preload: path.join(root, "preload.cjs"),
@@ -219,6 +219,10 @@ if (singleInstance)
         },
       });
       window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      windowController = new WindowController(
+        window,
+        path.join(data, "window-position.json"),
+      );
       window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
       window.webContents.on("will-navigate", (event, url) => {
         if (!trusted(url)) event.preventDefault();
@@ -286,12 +290,16 @@ if (singleInstance)
           { label: "Quit SaasFactory", click: () => app.quit() },
         ]),
       );
-      tray.on("click", () => setMode(mode === "island" ? "capture" : "island"));
-      globalShortcut.register("CommandOrControl+Shift+Space", () =>
-        setMode(mode === "island" ? "capture" : "island"),
+      tray.on("click", () =>
+        setMode(windowController.mode === "island" ? "capture" : "island"),
       );
-      screen.on("display-metrics-changed", () => setMode(mode));
-      screen.on("display-removed", () => setMode(mode));
+      globalShortcut.register("CommandOrControl+Shift+Space", () =>
+        setMode(windowController.mode === "island" ? "capture" : "island"),
+      );
+      screen.on("display-metrics-changed", () =>
+        windowController.repairDisplay(),
+      );
+      screen.on("display-removed", () => windowController.repairDisplay());
       app.on("activate", () => setMode("capture"));
       app.on("second-instance", () => setMode("capture"));
     })
@@ -311,9 +319,11 @@ app.on("before-quit", (event) => {
   connecting?.abort();
   globalShortcut.unregisterAll();
   void Promise.race([
-    service?.cancel(),
+    Promise.all([service?.cancel(), windowController?.flush()]),
     new Promise((resolve) => setTimeout(resolve, 2000)),
-  ]).finally(() => app.quit());
+    // Cleanup is already complete (or bounded by the timeout). Exit directly so
+    // a second quit request cannot re-enter macOS's cancelled quit sequence.
+  ]).finally(() => app.exit(0));
 });
 app.on("window-all-closed", () => {
   /* tray keeps the app alive */

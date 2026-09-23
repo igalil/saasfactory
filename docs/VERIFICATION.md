@@ -15,7 +15,15 @@ Verification is split between deterministic behavior, UI/native behavior, and ex
 - CLI build, desktop production build, and unsigned macOS ARM64 application packaging.
 - Packaged-app smoke test: renderer starts without JavaScript errors, native IPC works, all three supported provider runtimes load, and capture/settings screens open.
 
-Latest local result: 123 unit tests and 5 browser/native integration tests passed. Added SDK-boundary tests cover API-session rejection, explicit subscription login, post-login verification, sanitized failures, strict structured results, incomplete streams, local logout scope, Cursor credential/endpoint handling, abort during creation/send/stream, and account-change/run exclusion.
+Latest local result: 129 unit tests and 6 browser/native integration tests passed. Added SDK-boundary tests cover API-session rejection, explicit subscription login, post-login verification, sanitized failures, strict structured results, incomplete streams, local logout scope, Cursor credential/endpoint handling, abort during creation/send/stream, and account-change/run exclusion.
+
+## Floating window behavior
+
+- Placement tests cover either edge, negative display origins, small displays, vertical limits, and validated saved positions.
+- Native Electron checks cover actual focus/blur opacity changes (60% island, 80% capture, 100% focused), dragging without triggering capture, top/bottom limits, left/right docking, keyboard positioning, and restoring placement after restart. Off-window drag coordinates are injected through pointer events; IPC, native geometry, and persistence use the production paths.
+- Expansion and collapse apply final bounds without the native macOS resize animation. Native tests assert that every mode change disables that animation and preserves the island anchor.
+- Browser and native tests run sequentially because OS focus is shared. Automated UI checks use temporary libraries and start no AI work.
+- Packaged macOS mouse checks verified rapid vertical dragging without accidental capture, dragging across to the left edge, capture-header dragging, ordinary click expansion, and visible unfocused transparency. Native regression coverage also includes activation after window destruction and accessibility activation without pointer events. No live AI checks were started for this UI change.
 
 ## Task-specific model routing
 

@@ -18,7 +18,7 @@ Electron main (src/desktop/main.ts)
 
 The renderer has no Node integration, generic IPC method, or credentials. Context isolation and sandboxing are enabled. Navigation and popup windows are blocked; explicit web links are validated and opened by the OS. A CSP restricts renderer networking. Audio permission is limited to the app's own main content. Exports and imports use native file dialogs.
 
-`main.ts` owns the single-instance lock, tray, global shortcut, permission handlers, and the three window modes. The right edge position uses the current display's work area, and dimensions are clamped to that area. Display changes re-anchor the window. Window close collapses; tray Quit stops active work and exits.
+`main.ts` owns the single-instance lock, tray, global shortcut, and permission handlers. `window-controller.ts` owns the three window modes, native focus state, and edge-constrained dragging; `window-position.ts` clamps geometry to the display work area. A separate `window-position.json` saves the display, left/right edge, and normalized island height. Expanded panels retain that anchor, and disconnected displays fall back to an available display without stealing focus. Native resizes are immediate, avoiding layout reflow during macOS window animation. The renderer uses pointer capture for dragging, event-time screen coordinates through validated IPC, and CSS opacity for unfocused island/capture modes. The library remains opaque. Window close collapses; tray Quit flushes placement, stops active work, and exits.
 
 ## Data and execution
 

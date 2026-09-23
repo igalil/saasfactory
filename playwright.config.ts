@@ -2,6 +2,8 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
+  // Native focus/blur checks share the OS desktop with the browser project.
+  workers: 1,
   timeout: 45000,
   expect: { timeout: 8000 },
   reporter: "list",

@@ -33,6 +33,7 @@ import {
   modelLabel,
 } from "../../src/desktop/model-routing";
 import { api, isPreview } from "./api";
+import { useWindowDrag } from "./useWindowDrag";
 import {
   currentReport,
   SettingsSchema,
@@ -45,6 +46,7 @@ import {
   type ProviderStatus,
   type Settings,
   type WindowMode,
+  type WindowState,
 } from "../../src/desktop/shared";
 
 const names: Record<ProviderId, string> = {
@@ -127,9 +129,13 @@ export function App() {
   const [fatal, setFatal] = useState("");
   const [section, setSection] = useState<Section>("inbox");
   const [selected, setSelected] = useState<string>();
-  const [mode, setMode] = useState<WindowMode>(
-    isPreview ? "workspace" : "island",
-  );
+  const [windowState, setWindowState] = useState<WindowState>({
+    mode: isPreview ? "workspace" : "island",
+    edge: "right",
+    focused: isPreview,
+    dragging: false,
+  });
+  const { mode } = windowState;
   const [toast, setToast] = useState("");
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
   const [query, setQuery] = useState("");
@@ -159,7 +165,14 @@ export function App() {
       void refresh();
     });
   }, [refresh, refreshProviders]);
-  useEffect(() => api.onWindow(setMode), []);
+  useEffect(() => {
+    const unsubscribe = api.onWindow(setWindowState);
+    void api
+      .windowState()
+      .then(setWindowState)
+      .catch((error) => notify(errorMessage(error)));
+    return unsubscribe;
+  }, [notify]);
   useEffect(() => {
     const onFocus = () => {
       void refreshProviders();
@@ -191,6 +204,11 @@ export function App() {
     document.body.dataset["mode"] = mode;
     document.body.dataset["preview"] = String(isPreview);
   }, [mode]);
+  useEffect(() => {
+    document.body.dataset["focused"] = String(windowState.focused);
+    document.body.dataset["edge"] = windowState.edge;
+    document.body.dataset["dragging"] = String(windowState.dragging);
+  }, [windowState]);
   const run = library?.runs.find((item) => item.status === "running");
   const save = async (body: string) => {
     const idea = await api.capture({ body });
@@ -203,13 +221,43 @@ export function App() {
   const setWindow = (next: WindowMode) => {
     void api.setWindow(next).catch((error) => notify(errorMessage(error)));
   };
+  const drag = useWindowDrag(
+    () => {
+      if (mode === "island") setWindow("capture");
+    },
+    (error) => notify(errorMessage(error)),
+  );
   if (mode === "island")
     return (
       <button
         className="floating-island"
-        onClick={() => setWindow("capture")}
+        {...drag}
+        onClick={(event) => {
+          // Keyboard and accessibility activation may have no pointer gesture.
+          const pointer = event.nativeEvent;
+          if (
+            event.detail === 0 ||
+            !(pointer instanceof PointerEvent) ||
+            !pointer.pointerType
+          )
+            setWindow("capture");
+        }}
+        onKeyDown={(event) => {
+          const directions = {
+            ArrowUp: "up",
+            ArrowDown: "down",
+            ArrowLeft: "left",
+            ArrowRight: "right",
+          } as const;
+          if (event.altKey && event.key in directions) {
+            event.preventDefault();
+            void api
+              .nudgeWindow(directions[event.key as keyof typeof directions])
+              .catch((error) => notify(errorMessage(error)));
+          }
+        }}
         aria-label="Capture an idea"
-        title="Capture an idea · Ctrl/⌘ Shift Space"
+        title="Click to capture · Drag up/down or to the other edge · Alt + arrows to reposition · Ctrl/⌘ Shift Space"
       >
         <Mark small />
         <span className="island-line" />
@@ -277,7 +325,11 @@ export function App() {
     <div className={`app-shell mode-${mode}`}>
       {mode === "capture" ? (
         <>
-          <header className="capture-header">
+          <header
+            className="capture-header"
+            {...drag}
+            title="Drag to reposition along either screen edge"
+          >
             <span className="brand">
               <Mark small /> saasfactory<span className="brand-dot">.</span>
             </span>

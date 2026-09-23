@@ -5,7 +5,7 @@ import {
   SettingsSchema,
   emptyLibrary,
   type DesktopAPI,
-  type WindowMode,
+  type WindowState,
 } from "../../src/desktop/shared";
 import { exportMarkdown } from "../../src/desktop/export";
 
@@ -37,8 +37,13 @@ function download(name: string, text: string, type: string) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-let previewMode: WindowMode = "workspace";
-const windowListeners = new Set<(mode: WindowMode) => void>();
+let previewWindow: WindowState = {
+  mode: "workspace",
+  edge: "right",
+  focused: true,
+  dragging: false,
+};
+const windowListeners = new Set<(state: WindowState) => void>();
 const preview: DesktopAPI = {
   platform: "browser",
   snapshot: async () => read(),
@@ -110,8 +115,18 @@ const preview: DesktopAPI = {
   transcribe: unavailable,
   chooseVoiceFile: unavailable,
   setWindow: async (mode) => {
-    previewMode = mode;
-    windowListeners.forEach((listener) => listener(previewMode));
+    previewWindow = { ...previewWindow, mode };
+    windowListeners.forEach((listener) => listener(previewWindow));
+  },
+  windowState: async () => previewWindow,
+  beginWindowDrag: async () => {},
+  moveWindowDrag: async () => {},
+  endWindowDrag: async () => false,
+  nudgeWindow: async (direction) => {
+    if (direction === "left" || direction === "right") {
+      previewWindow = { ...previewWindow, edge: direction };
+      windowListeners.forEach((listener) => listener(previewWindow));
+    }
   },
   openExternal: async (url) => {
     window.open(url, "_blank", "noopener,noreferrer");

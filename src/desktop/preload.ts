@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopAPI, WindowMode } from "./shared.js";
+import type { DesktopAPI, WindowState } from "./shared.js";
 
 const api: DesktopAPI = {
   snapshot: () => ipcRenderer.invoke("library:snapshot"),
@@ -18,6 +18,11 @@ const api: DesktopAPI = {
   backup: () => ipcRenderer.invoke("library:backup"),
   restore: () => ipcRenderer.invoke("library:restore"),
   setWindow: (mode) => ipcRenderer.invoke("window:mode", mode),
+  windowState: () => ipcRenderer.invoke("window:state"),
+  beginWindowDrag: (point) => ipcRenderer.invoke("window:drag-start", point),
+  moveWindowDrag: (point) => ipcRenderer.invoke("window:drag-move", point),
+  endWindowDrag: (point) => ipcRenderer.invoke("window:drag-end", point),
+  nudgeWindow: (direction) => ipcRenderer.invoke("window:nudge", direction),
   openExternal: (url) => ipcRenderer.invoke("link:open", url),
   transcribe: (audio) => ipcRenderer.invoke("voice:transcribe", audio),
   chooseVoiceFile: (kind) => ipcRenderer.invoke("voice:choose", kind),
@@ -29,7 +34,7 @@ const api: DesktopAPI = {
     };
   },
   onWindow: (listener) => {
-    const callback = (_event: unknown, mode: WindowMode) => listener(mode);
+    const callback = (_event: unknown, state: WindowState) => listener(state);
     ipcRenderer.on("window:changed", callback);
     return () => {
       ipcRenderer.removeListener("window:changed", callback);

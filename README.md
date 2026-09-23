@@ -1,6 +1,6 @@
 # SaasFactory
 
-A local desktop home for SaaS ideas. Catch a thought in a floating island at the right edge of your screen, give it a quick first look, and research it when it deserves more time.
+A local desktop home for SaaS ideas. Catch a thought in a floating island at either edge of your screen, give it a quick first look, and research it when it deserves more time.
 
 The desktop app uses Electron, React, and official provider SDKs. The original Claude-powered project-generation CLI remains available alongside it.
 
@@ -19,6 +19,8 @@ bun run desktop:start
 For live development, use `bun run desktop:dev`. `bun run desktop:preview` is a browser-only preview: it saves captures to that browser, but cannot connect providers, transcribe, or perform domain checks.
 
 Click the black island to capture a thought. **Cmd/Ctrl + Shift + Space** toggles capture; **Cmd/Ctrl + Enter** saves; **Escape** collapses the window. The tray menu opens the library or quits. Closing the window returns to the island. The expanded library is not always on top; the island and capture panel are.
+
+Drag the island (or the capture panel's header) up and down to choose its height. Drag across the screen to snap to the other edge, or onto another display. Placement stays within the usable screen area and is remembered after restart. With the island focused, **Alt + arrow keys** move it vertically or switch sides. The island fades to 60% opacity when unfocused; the capture panel fades to 80%. Both return to full opacity on focus. Expansion uses an immediate resize to avoid the old stretching animation.
 
 ## The workflow
 

@@ -135,7 +135,13 @@ test("challenge is deliberate, names its model, and preserves access to the earl
   // Controlled preload contract for UI behavior only; service and SDK tests verify execution.
   await page.addInitScript((state) => {
     const listeners = new Set<() => void>();
-    const windows = new Set<(mode: string) => void>();
+    let windowState = {
+      mode: "island",
+      edge: "right",
+      focused: true,
+      dragging: false,
+    };
+    const windows = new Set<(state: typeof windowState) => void>();
     (window as any).requestedChecks = [];
     (window as any).saasfactory = {
       platform: "test",
@@ -147,12 +153,18 @@ test("challenge is deliberate, names its model, and preserves access to the earl
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
-      onWindow: (listener: (mode: string) => void) => {
+      onWindow: (listener: (state: typeof windowState) => void) => {
         windows.add(listener);
         return () => windows.delete(listener);
       },
-      setWindow: async (mode: string) =>
-        windows.forEach((listener) => listener(mode)),
+      windowState: async () => windowState,
+      beginWindowDrag: async () => {},
+      moveWindowDrag: async () => {},
+      endWindowDrag: async () => false,
+      setWindow: async (mode: string) => {
+        windowState = { ...windowState, mode };
+        windows.forEach((listener) => listener(windowState));
+      },
       analyze: async (id: string, mode: "challenge") => {
         (window as any).requestedChecks.push({ id, mode });
         const idea = state.ideas.find((item) => item.id === id)!;
