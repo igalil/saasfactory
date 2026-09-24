@@ -17,6 +17,8 @@ mac:
   category: public.app-category.productivity
   target: [dmg, zip]
   icon: assets/icon.png
+  entitlements: assets/entitlements.mac.plist
+  entitlementsInherit: assets/entitlements.mac.plist
   extendInfo:
     NSMicrophoneUsageDescription: Record an idea and transcribe it locally on your device.
 win:

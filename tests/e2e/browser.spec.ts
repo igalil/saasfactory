@@ -140,6 +140,7 @@ test("challenge is deliberate, names its model, and preserves access to the earl
       edge: "right",
       focused: true,
       dragging: false,
+      motion: null,
     };
     const windows = new Set<(state: typeof windowState) => void>();
     (window as any).requestedChecks = [];

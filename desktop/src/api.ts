@@ -42,6 +42,7 @@ let previewWindow: WindowState = {
   edge: "right",
   focused: true,
   dragging: false,
+  motion: null,
 };
 const windowListeners = new Set<(state: WindowState) => void>();
 const preview: DesktopAPI = {
@@ -122,6 +123,7 @@ const preview: DesktopAPI = {
   beginWindowDrag: async () => {},
   moveWindowDrag: async () => {},
   endWindowDrag: async () => false,
+  finishIslandMotion: async () => {},
   nudgeWindow: async (direction) => {
     if (direction === "left" || direction === "right") {
       previewWindow = { ...previewWindow, edge: direction };

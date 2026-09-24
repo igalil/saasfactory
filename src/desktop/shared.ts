@@ -230,11 +230,18 @@ export const WindowPointSchema = z
   })
   .strict();
 export type WindowPoint = z.infer<typeof WindowPointSchema>;
+export type IslandMotion = {
+  id: number;
+  phase: "pull" | "return" | "flight";
+  from: "left" | "right";
+  pull: number;
+};
 export type WindowState = {
   mode: WindowMode;
   edge: "left" | "right";
   focused: boolean;
   dragging: boolean;
+  motion: IslandMotion | null;
 };
 export interface DesktopAPI {
   snapshot(): Promise<Library>;
@@ -256,6 +263,7 @@ export interface DesktopAPI {
   beginWindowDrag(point: WindowPoint): Promise<void>;
   moveWindowDrag(point: WindowPoint): Promise<void>;
   endWindowDrag(point?: WindowPoint): Promise<boolean>;
+  finishIslandMotion(id: number): Promise<void>;
   nudgeWindow(direction: "up" | "down" | "left" | "right"): Promise<void>;
   openExternal(url: string): Promise<void>;
   transcribe(audio: ArrayBuffer): Promise<string>;

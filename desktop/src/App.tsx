@@ -7,11 +7,13 @@ import {
   Archive,
   Check,
   ChevronDown,
+  Circle,
   CircleHelp,
   Compass,
   FileText,
   Globe2,
   Inbox,
+  Lightbulb,
   LoaderCircle,
   Maximize2,
   Mic,
@@ -34,6 +36,7 @@ import {
 } from "../../src/desktop/model-routing";
 import { api, isPreview } from "./api";
 import { useWindowDrag } from "./useWindowDrag";
+import { IslandSurface } from "./IslandSurface";
 import {
   currentReport,
   SettingsSchema,
@@ -134,6 +137,7 @@ export function App() {
     edge: "right",
     focused: isPreview,
     dragging: false,
+    motion: null,
   });
   const { mode } = windowState;
   const [toast, setToast] = useState("");
@@ -210,6 +214,7 @@ export function App() {
     document.body.dataset["dragging"] = String(windowState.dragging);
   }, [windowState]);
   const run = library?.runs.find((item) => item.status === "running");
+  const islandStatus = run ? "Thinking — validating an idea" : "Idle";
   const save = async (body: string) => {
     const idea = await api.capture({ body });
     setSelected(idea.id);
@@ -226,44 +231,65 @@ export function App() {
       if (mode === "island") setWindow("capture");
     },
     (error) => notify(errorMessage(error)),
+    !windowState.motion || windowState.motion.phase === "pull",
   );
   if (mode === "island")
     return (
-      <button
-        className="floating-island"
-        {...drag}
-        onClick={(event) => {
-          // Keyboard and accessibility activation may have no pointer gesture.
-          const pointer = event.nativeEvent;
-          if (
-            event.detail === 0 ||
-            !(pointer instanceof PointerEvent) ||
-            !pointer.pointerType
-          )
-            setWindow("capture");
-        }}
-        onKeyDown={(event) => {
-          const directions = {
-            ArrowUp: "up",
-            ArrowDown: "down",
-            ArrowLeft: "left",
-            ArrowRight: "right",
-          } as const;
-          if (event.altKey && event.key in directions) {
-            event.preventDefault();
-            void api
-              .nudgeWindow(directions[event.key as keyof typeof directions])
-              .catch((error) => notify(errorMessage(error)));
-          }
-        }}
-        aria-label="Capture an idea"
-        title="Click to capture · Drag up/down or to the other edge · Alt + arrows to reposition · Ctrl/⌘ Shift Space"
-      >
-        <Mark small />
-        <span className="island-line" />
-        <span className={`signal ${run ? "working" : ""}`} />
-        <Plus size={18} />
-      </button>
+      <IslandSurface state={windowState}>
+        <button
+          className="floating-island"
+          {...drag}
+          onClick={(event) => {
+            if (windowState.motion) return;
+            // Keyboard and accessibility activation may have no pointer gesture.
+            const pointer = event.nativeEvent;
+            if (
+              event.detail === 0 ||
+              !(pointer instanceof PointerEvent) ||
+              !pointer.pointerType
+            )
+              setWindow("capture");
+          }}
+          onKeyDown={(event) => {
+            const directions = {
+              ArrowUp: "up",
+              ArrowDown: "down",
+              ArrowLeft: "left",
+              ArrowRight: "right",
+            } as const;
+            if (event.altKey && event.key in directions) {
+              event.preventDefault();
+              void api
+                .nudgeWindow(directions[event.key as keyof typeof directions])
+                .catch((error) => notify(errorMessage(error)));
+            }
+          }}
+          aria-label="Capture an idea"
+          aria-describedby="island-status"
+          title={`${islandStatus} · Click to capture · Drag up/down · Pull inward to spring to the other edge · Alt + arrows to reposition`}
+        >
+          <Lightbulb
+            className="island-idea"
+            size={28}
+            strokeWidth={1.6}
+            aria-hidden="true"
+          />
+          <span
+            className="island-status"
+            data-state={run ? "thinking" : "idle"}
+            aria-hidden="true"
+          >
+            {run ? (
+              <LoaderCircle size={16} className="spin" />
+            ) : (
+              <Circle size={14} strokeWidth={1.5} />
+            )}
+          </span>
+        </button>
+        <span id="island-status" className="sr-only" role="status">
+          {islandStatus}
+        </span>
+      </IslandSurface>
     );
   if (fatal)
     return (

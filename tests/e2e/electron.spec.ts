@@ -3,6 +3,175 @@ import { mkdtemp, rm, readFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 
+test("macOS Dock presence survives mode changes, window close, and activation", async () => {
+  test.skip(process.platform !== "darwin", "macOS Dock behavior");
+  const directory = await mkdtemp(path.join(os.tmpdir(), "saasfactory-dock-"));
+  const env = { ...process.env, SAASFACTORY_DATA_DIR: directory };
+  delete env["ELECTRON_RUN_AS_NODE"];
+  delete env["SAASFACTORY_DEV_URL"];
+  const app = await electron.launch({
+    args: ["dist-desktop/main/main.js"],
+    env,
+  });
+  try {
+    const page = await app.firstWindow();
+    const dockVisible = () => app.evaluate(({ app }) => app.dock!.isVisible());
+    await expect(page.locator("body")).toHaveAttribute("data-mode", "island");
+    await expect.poll(dockVisible).toBe(true);
+    for (const mode of ["capture", "workspace", "island"] as const) {
+      await page.evaluate((mode) => window.saasfactory!.setWindow(mode), mode);
+      await expect(page.locator("body")).toHaveAttribute("data-mode", mode);
+      await expect.poll(dockVisible).toBe(true);
+    }
+    await app.evaluate(({ app }) => app.emit("activate", {}, false));
+    await expect(page.locator("body")).toHaveAttribute("data-mode", "capture");
+    await expect(page.locator("body")).toHaveAttribute("data-focused", "true");
+    await expect.poll(dockVisible).toBe(true);
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]!.close(),
+    );
+    await expect(page.locator("body")).toHaveAttribute("data-mode", "island");
+    await expect.poll(dockVisible).toBe(true);
+  } finally {
+    await app.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("sticky island returns from small pulls and flies past the held pointer on release", async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "saasfactory-sticky-"),
+  );
+  const env = { ...process.env, SAASFACTORY_DATA_DIR: directory };
+  delete env["ELECTRON_RUN_AS_NODE"];
+  delete env["SAASFACTORY_DEV_URL"];
+  const app = await electron.launch({
+    args: ["dist-desktop/main/main.js"],
+    env,
+  });
+  try {
+    const page = await app.firstWindow();
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    const island = page.getByRole("button", {
+      name: "Capture an idea",
+      exact: true,
+    });
+    const stage = page.locator(".island-stage");
+    await expect(island).toBeVisible();
+    await app.evaluate(({ app, BrowserWindow }) => {
+      app.focus({ steal: true });
+      BrowserWindow.getAllWindows()[0]!.focus();
+    });
+    await expect(page.locator("body")).toHaveAttribute("data-focused", "true");
+    await app.evaluate(({ systemPreferences }) => {
+      const original =
+        systemPreferences.getAnimationSettings.bind(systemPreferences);
+      systemPreferences.getAnimationSettings = () => ({
+        ...original(),
+        prefersReducedMotion: false,
+      });
+    });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const geometry = () =>
+      app.evaluate(({ BrowserWindow, screen }) => {
+        const window = BrowserWindow.getAllWindows()[0]!;
+        return {
+          bounds: window.getBounds(),
+          work: screen.getDisplayMatching(window.getBounds()).workArea,
+        };
+      });
+    const original = await geometry();
+    const point = { x: original.bounds.x + 32, y: original.bounds.y + 80 };
+    const move = async (x: number, type = "pointermove") =>
+      island.dispatchEvent(type, {
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        buttons: type === "pointerup" ? 0 : 1,
+        screenX: x,
+        screenY: point.y,
+      });
+    await page.mouse.move(32, 80);
+    await page.mouse.down();
+    await move(point.x - 48);
+    await expect(stage).toHaveAttribute("data-phase", "pull");
+    await expect(page.getByText("Pull to switch sides")).toHaveCount(0);
+    expect((await geometry()).bounds.width).toBe(original.work.width - 20);
+    await page.screenshot({ path: "test-results/island-sticky-pull.png" });
+    await move(point.x - 48, "pointerup");
+    await page.mouse.up();
+    await expect(stage).toHaveAttribute("data-phase", "idle");
+    expect((await geometry()).bounds).toEqual(original.bounds);
+
+    await page.mouse.move(32, 80);
+    await page.mouse.down();
+    await move(point.x - 110); // Only a short pull; mouse is still at the original side.
+    await expect(stage).toHaveAttribute("data-phase", "flight");
+    await expect
+      .poll(() =>
+        page
+          .locator(".island-traveler")
+          .evaluate((element) =>
+            element
+              .getAnimations()
+              .some((animation) => animation.playState === "running"),
+          ),
+      )
+      .toBe(true);
+    // Inspect a real compositor frame and retain a screenshot of the airborne shape.
+    await page.locator(".island-traveler").evaluate((element) => {
+      const animation = element.getAnimations()[0]!;
+      animation.pause();
+      animation.currentTime = 250;
+      return new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+    });
+    const airborne = await island.boundingBox();
+    expect(airborne!.x).toBeLessThan(original.work.width * 0.7);
+    expect(airborne!.x).toBeGreaterThan(64);
+    await page.screenshot({ path: "test-results/island-sticky-flight.png" });
+    await page
+      .locator(".island-traveler")
+      .evaluate((element) => element.getAnimations()[0]!.play());
+    await move(point.x + 5); // Late pointer events must not take the island back.
+    await expect(stage).toHaveAttribute("data-phase", "idle");
+    await page.mouse.up();
+    expect((await geometry()).bounds).toMatchObject({
+      x: original.work.x + 10,
+      width: 64,
+      y: original.bounds.y,
+    });
+    await expect(island).toBeVisible();
+
+    await app.evaluate(({ systemPreferences }) => {
+      const original =
+        systemPreferences.getAnimationSettings.bind(systemPreferences);
+      systemPreferences.getAnimationSettings = () => ({
+        ...original(),
+        prefersReducedMotion: true,
+      });
+    });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.mouse.move(32, 80);
+    await page.mouse.down();
+    await move(original.work.x + 42 + 110);
+    await move(original.work.x + 42 + 110, "pointerup");
+    await page.mouse.up();
+    await expect(stage).toHaveAttribute("data-phase", "idle");
+    expect((await geometry()).bounds).toEqual(original.bounds);
+    await island.click();
+    await expect(
+      page.getByRole("textbox", { name: "Your SaaS idea", exact: true }),
+    ).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await app.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("floating focus, edge dragging, immediate expansion, and saved placement", async () => {
   const directory = await mkdtemp(
     path.join(os.tmpdir(), "saasfactory-window-"),
@@ -51,6 +220,10 @@ test("floating focus, edge dragging, immediate expansion, and saved placement", 
       await island().dispatchEvent("pointermove", { ...event, buttons: 1 });
       await island().dispatchEvent("pointerup", { ...event, buttons: 0 });
       await page.mouse.up();
+      await expect(page.locator(".island-stage")).toHaveAttribute(
+        "data-phase",
+        "idle",
+      );
     };
     const { work } = await geometry();
     await dragTo({ x: work.x + 32, y: work.y - 200 });

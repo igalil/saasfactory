@@ -6,6 +6,8 @@ The desktop app uses Electron, React, and official provider SDKs. The original C
 
 ## Run the desktop app
 
+For everyday use on this Mac, open `~/Applications/SaasFactory.app` from Finder or Spotlight. It runs without a terminal or development server. Your library stays in the same Application Support directory when the app is updated.
+
 Development requires Node.js **24+** and Bun **1.3+**. Provider-native optional dependencies must be installed for the machine you build on.
 
 ```sh
@@ -18,9 +20,13 @@ bun run desktop:start
 
 For live development, use `bun run desktop:dev`. `bun run desktop:preview` is a browser-only preview: it saves captures to that browser, but cannot connect providers, transcribe, or perform domain checks.
 
-Click the black island to capture a thought. **Cmd/Ctrl + Shift + Space** toggles capture; **Cmd/Ctrl + Enter** saves; **Escape** collapses the window. The tray menu opens the library or quits. Closing the window returns to the island. The expanded library is not always on top; the island and capture panel are.
+Click the black island to capture a thought. It shows a lightbulb and one status icon: a quiet ring when idle, or a spinner while validating an idea. **Cmd/Ctrl + Shift + Space** toggles capture; **Cmd/Ctrl + Enter** saves; **Escape** collapses the window. The tray menu opens the library or quits. Closing the window returns to the island. The expanded library is not always on top; the island and capture panel are.
 
-Drag the island (or the capture panel's header) up and down to choose its height. Drag across the screen to snap to the other edge, or onto another display. Placement stays within the usable screen area and is remembered after restart. With the island focused, **Alt + arrow keys** move it vertically or switch sides. The island fades to 60% opacity when unfocused; the capture panel fades to 80%. Both return to full opacity on focus. Expansion uses an immediate resize to avoid the old stretching animation.
+On macOS, SaasFactory stays in the Dock and **Command-Tab** app switcher, including when collapsed to the island. Activating it from the Dock opens quick capture.
+
+Drag the island (or the capture panel's header) up and down to choose its height. Pull the island inward to stretch its sticky connection to the edge: a short pull settles back, while pulling past the release point catapults it to the opposite wall with a soft landing. You can keep holding the mouse; the island completes the flight on its own. With reduced motion enabled, the same gesture switches sides immediately.
+
+The capture header still drags across the screen normally, and dragging outward onto an adjacent display transfers the island there. Placement stays within the usable screen area and is remembered after restart. With the island focused, **Alt + arrow keys** move it vertically or switch sides. The island fades to 60% opacity when unfocused; the capture panel fades to 80%. Both return to full opacity on focus. Expansion uses an immediate resize to avoid the old stretching animation.
 
 ## The workflow
 
@@ -98,6 +104,7 @@ bun run build                 # Legacy CLI
 bun run desktop:build
 bun run test:e2e               # Chrome browser + native Electron integration
 bun run desktop:package       # Installer targets for the current OS
+bun run desktop:package:local # Locally signed macOS app in release/local/mac-arm64/
 ```
 
 Browser integration tests use installed Google Chrome. Test libraries use temporary directories and simulated reports; they do not spend provider usage. Live provider analysis requires a user login and is a separate, usage-consuming acceptance check. A repeatable smoke command is available (replace the directory with your app’s actual provider directory):
@@ -111,7 +118,7 @@ bun run test:provider --provider codex --mode challenge --providers-dir "/path/t
 
 The command uses one sample cleaning-business idea, checks the completed report against the application schema, and requires observed searches and multiple source hosts for research and challenge modes. It does not add anything to the idea library. Never copy credentials into the repository. See [verification status](docs/VERIFICATION.md) for live versus simulated coverage.
 
-`electron-builder.yml` targets macOS DMG/ZIP, Windows NSIS, and Linux AppImage/DEB. Build on each target OS with its native optional dependencies. The local macOS build is unsigned; public distribution still requires signing/notarization, platform testing, and release credentials. Linux placement depends on compositor support, particularly on Wayland. See [verification status](docs/VERIFICATION.md).
+`electron-builder.yml` targets macOS DMG/ZIP, Windows NSIS, and Linux AppImage/DEB. Build on each target OS with its native optional dependencies. `desktop:package:local` applies an ad-hoc signature for use on your own Mac; public distribution still requires Developer ID signing/notarization, platform testing, and release credentials. Linux placement depends on compositor support, particularly on Wayland. See [verification status](docs/VERIFICATION.md).
 
 ## Original CLI
 

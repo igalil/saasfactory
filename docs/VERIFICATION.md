@@ -14,12 +14,16 @@ Verification is split between deterministic behavior, UI/native behavior, and ex
 - Actual macOS Electron island geometry, preload IPC, capture persistence across restart, and unsupported-provider blocking.
 - CLI build, desktop production build, and unsigned macOS ARM64 application packaging.
 - Packaged-app smoke test: renderer starts without JavaScript errors, native IPC works, all three supported provider runtimes load, and capture/settings screens open.
+- Final local macOS package is ad-hoc signed with Electron runtime and audio-input entitlements. Installed in `~/Applications/SaasFactory.app`; capture, library, settings, provider readiness, Dock presence, and preservation of the existing library were verified without starting AI work.
 
-Latest local result: 129 unit tests and 6 browser/native integration tests passed. Added SDK-boundary tests cover API-session rejection, explicit subscription login, post-login verification, sanitized failures, strict structured results, incomplete streams, local logout scope, Cursor credential/endpoint handling, abort during creation/send/stream, and account-change/run exclusion.
+Latest local result: 136 unit tests and 7 browser/native integration tests passed. Added SDK-boundary tests cover API-session rejection, explicit subscription login, post-login verification, sanitized failures, strict structured results, incomplete streams, local logout scope, Cursor credential/endpoint handling, abort during creation/send/stream, and account-change/run exclusion.
 
 ## Floating window behavior
 
+- macOS native checks confirm the Dock entry remains visible through island, capture, and library modes, Dock activation opens capture, and closing the window collapses without removing the Dock entry.
 - Placement tests cover either edge, negative display origins, small displays, vertical limits, and validated saved positions.
+- Sticky-gesture tests cover resisted pulls, early-release return, launching while the mouse is held, both directions, ignoring subsequent pointer positions, tiny click jitter, vertical dragging, reduced motion, stale animation acknowledgments, and recovery after renderer timeout or mode/display changes. Native tests exercise the actual SVG/animation surface, the return and flight, narrow-window restoration, and normal capture afterward.
+- Packaged macOS checks with actual mouse input verified a short pull returning to the same edge and an inward pull switching sides without opening capture. The updated app was left running; no analysis was started.
 - Native Electron checks cover actual focus/blur opacity changes (60% island, 80% capture, 100% focused), dragging without triggering capture, top/bottom limits, left/right docking, keyboard positioning, and restoring placement after restart. Off-window drag coordinates are injected through pointer events; IPC, native geometry, and persistence use the production paths.
 - Expansion and collapse apply final bounds without the native macOS resize animation. Native tests assert that every mode change disables that animation and preserves the island anchor.
 - Browser and native tests run sequentially because OS focus is shared. Automated UI checks use temporary libraries and start no AI work.

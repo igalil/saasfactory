@@ -116,6 +116,9 @@ function registerHandlers(providers: SubscriptionProviders) {
   handle("window:drag-end", (input) =>
     windowController.endDrag(WindowPointSchema.optional().parse(input)),
   );
+  handle("window:motion-end", (input) =>
+    windowController.finishMotion(z.number().int().positive().parse(input)),
+  );
   handle("window:nudge", (input) =>
     windowController.nudge(
       z.enum(["up", "down", "left", "right"]).parse(input),
@@ -207,7 +210,7 @@ if (singleInstance)
         resizable: false,
         hasShadow: false,
         show: false,
-        skipTaskbar: true,
+        skipTaskbar: process.platform !== "darwin",
         acceptFirstMouse: true,
         backgroundColor: "#00000000",
         webPreferences: {
@@ -219,6 +222,11 @@ if (singleInstance)
         },
       });
       window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      if (process.platform === "darwin") {
+        // Keep the Dock and Command-Tab entry even while the island spans Spaces.
+        app.setActivationPolicy("regular");
+        await app.dock?.show();
+      }
       windowController = new WindowController(
         window,
         path.join(data, "window-position.json"),

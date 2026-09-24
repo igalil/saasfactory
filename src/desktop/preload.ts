@@ -22,6 +22,7 @@ const api: DesktopAPI = {
   beginWindowDrag: (point) => ipcRenderer.invoke("window:drag-start", point),
   moveWindowDrag: (point) => ipcRenderer.invoke("window:drag-move", point),
   endWindowDrag: (point) => ipcRenderer.invoke("window:drag-end", point),
+  finishIslandMotion: (id) => ipcRenderer.invoke("window:motion-end", id),
   nudgeWindow: (direction) => ipcRenderer.invoke("window:nudge", direction),
   openExternal: (url) => ipcRenderer.invoke("link:open", url),
   transcribe: (audio) => ipcRenderer.invoke("voice:transcribe", audio),

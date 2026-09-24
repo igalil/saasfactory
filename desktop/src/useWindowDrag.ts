@@ -7,20 +7,30 @@ import type { WindowPoint } from "../../src/desktop/shared";
 export function useWindowDrag(
   onTap: () => void,
   onError: (error: unknown) => void,
+  enabled = true,
 ) {
   const pointer = useRef<number | null>(null);
+  const element = useRef<HTMLElement | null>(null);
   const frame = useRef<number | null>(null);
   const latestPoint = useRef<WindowPoint>({ x: 0, y: 0 });
   const cancelFrame = () => {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
   };
+  const cancel = () => {
+    cancelFrame();
+    const id = pointer.current;
+    pointer.current = null;
+    if (id !== null) {
+      if (element.current?.hasPointerCapture(id))
+        element.current.releasePointerCapture(id);
+      void api.endWindowDrag().catch(() => {});
+    }
+  };
   useEffect(() => {
-    const cancel = () => {
-      cancelFrame();
-      if (pointer.current !== null) void api.endWindowDrag().catch(() => {});
-      pointer.current = null;
-    };
+    if (!enabled) cancel();
+  }, [enabled]);
+  useEffect(() => {
     window.addEventListener("blur", cancel);
     return () => {
       window.removeEventListener("blur", cancel);
@@ -43,13 +53,19 @@ export function useWindowDrag(
   };
   return {
     onPointerDown: (event: PointerEvent<HTMLElement>) => {
-      if (event.button !== 0 || !event.isPrimary || pointer.current !== null)
+      if (
+        !enabled ||
+        event.button !== 0 ||
+        !event.isPrimary ||
+        pointer.current !== null
+      )
         return;
       const control = (event.target as HTMLElement).closest(
         "button, a, input, textarea, select",
       );
       if (control && control !== event.currentTarget) return;
       pointer.current = event.pointerId;
+      element.current = event.currentTarget;
       event.currentTarget.setPointerCapture(event.pointerId);
       void api
         .beginWindowDrag({ x: event.screenX, y: event.screenY })
