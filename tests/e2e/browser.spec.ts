@@ -27,7 +27,7 @@ test("capture, refresh, shortlist, notes, edit, archive, and settings persist wi
     .getByRole("button", { name: "Add to shortlist", exact: true })
     .click();
   await page
-    .getByRole("textbox", { name: "Your notes" })
+    .getByRole("textbox", { name: "Notes" })
     .fill("Interview five agency owners.");
   await page.getByRole("button", { name: "Save notes", exact: true }).click();
   await page.reload();
@@ -41,18 +41,14 @@ test("capture, refresh, shortlist, notes, edit, archive, and settings persist wi
       }),
     })
     .click();
-  await expect(page.getByRole("textbox", { name: "Your notes" })).toHaveValue(
+  await expect(page.getByRole("textbox", { name: "Notes" })).toHaveValue(
     "Interview five agency owners.",
   );
-  await page.getByRole("button", { name: "Edit thought", exact: true }).click();
+  await page.getByRole("button", { name: "Edit idea", exact: true }).click();
   await page.getByLabel("Title", { exact: true }).fill("Agency handoff");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Put on the shelf", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "On the shelf 1", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Archive idea", exact: true }).click();
+  await page.getByRole("button", { name: "Archive 1", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Agency handoff", level: 3 }),
   ).toBeVisible();
@@ -202,7 +198,7 @@ test("challenge is deliberate, names its model, and preserves access to the earl
     .getByRole("button", { name: "Challenge this idea", exact: true })
     .click();
   await expect(
-    page.getByText("Does this idea stand up to scrutiny?", { exact: true }),
+    page.getByText("Start challenge?", { exact: true }),
   ).toBeVisible();
   await expect(page.locator(".research-confirm")).toContainText(
     "GPT-6 Astra · high reasoning",
@@ -210,7 +206,7 @@ test("challenge is deliberate, names its model, and preserves access to the earl
   expect(await page.evaluate(() => (window as any).requestedChecks)).toEqual(
     [],
   );
-  await page.getByRole("button", { name: "Later", exact: true }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   expect(await page.evaluate(() => (window as any).requestedChecks)).toEqual(
     [],
   );
@@ -281,16 +277,14 @@ test("reports show evidence limits, domains, build scope, stale history, and con
       has: page.getByRole("heading", { name: "Agency handoff", level: 3 }),
     })
     .click();
-  await expect(
-    page.getByText("Worth exploring", { exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "The market", exact: true }).click();
+  await expect(page.getByText("Pursue", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Market", exact: true }).click();
   await expect(
     page.getByText("This does not establish an empty market.", {
       exact: false,
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "The build", exact: true }).click();
+  await page.getByRole("button", { name: "Build", exact: true }).click();
   await expect(
     page.getByRole("listitem").filter({ hasText: "Reusable checklist" }),
   ).toBeVisible();
@@ -300,11 +294,11 @@ test("reports show evidence limits, domains, build scope, stale history, and con
   await expect(
     page.getByText("handoffnest.com", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("checkbox", { name: "Promising" }).check();
+  await page.getByRole("checkbox", { name: "Recommended" }).check();
   await expect(
     page.getByRole("heading", { name: "Agency handoff", level: 3 }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Edit thought", exact: true }).click();
+  await page.getByRole("button", { name: "Edit idea", exact: true }).click();
   await page
     .getByLabel("Original idea", { exact: true })
     .fill("A different audience and problem");

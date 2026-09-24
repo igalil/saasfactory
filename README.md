@@ -34,7 +34,7 @@ The capture header still drags across the screen normally, and dragging outward 
 - **Quick check:** explicitly request a concise first impression: a sharper idea, buyer, risks, MVP, rough effort, names, and next experiment. No web tools. Always marked preliminary, low confidence, and not market validation.
 - **Research:** explicitly start a deeper check, bounded to ten minutes. The provider searches for competition, substitutes, pricing, demand, and counter-evidence. Reports distinguish crowded, healthy, unexplored, and unknown markets, with pursue, pivot, pass, or unproven verdicts.
 - **Challenge:** with Codex selected, explicitly review an existing report with Astra. It rechecks claims, looks for counter-evidence, and explains which assumptions could change the verdict. This never runs automatically and preserves the earlier report.
-- **Decide:** shortlist or shelve ideas, search and sort them, compare opportunity ratings and build effort, preserve notes, and export Markdown briefs. The “Promising” filter requires a pursue verdict and your chosen rating threshold. Ratings are not probabilities of business success.
+- **Decide:** shortlist or archive ideas, search and sort them, compare opportunity ratings and build effort, preserve notes, and export Markdown briefs. The “Recommended” filter requires a pursue verdict and your chosen rating threshold. Ratings are not probabilities of business success.
 
 Research without an observed search and at least two distinct source hosts is downgraded to unproven/unrated. Sources are AI-selected evidence, not independent verification of all claims. Failed checks never become positive fallback reports. Changing an idea preserves its report history but removes stale results from ranking.
 

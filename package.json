@@ -1,7 +1,7 @@
 {
   "name": "saasfactory",
   "version": "0.1.0",
-  "description": "A local-first desktop home for capturing and validating SaaS ideas, with subscription AI agents",
+  "description": "A desktop tool for capturing and evaluating SaaS ideas with subscription AI accounts",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

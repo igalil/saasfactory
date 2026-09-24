@@ -163,7 +163,7 @@ export class IdeaService extends EventEmitter {
         ...(provider === "codex" ? codexSelection(state.settings, mode) : {}),
         status: "running",
         startedAt: new Date().toISOString(),
-        message: "Starting your check…",
+        message: "Starting analysis…",
       };
       await this.store.update((library) => {
         controller.signal.throwIfAborted();

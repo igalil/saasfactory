@@ -59,16 +59,16 @@ const names: Record<ProviderId, string> = {
   xai: "Grok / SpaceXAI",
 };
 const verdicts: Record<Analysis["verdict"], string> = {
-  pursue: "Worth exploring",
-  pivot: "Find a sharper angle",
-  pass: "Better to move on",
+  pursue: "Pursue",
+  pivot: "Pivot",
+  pass: "Pass",
   unproven: "Not enough evidence",
 };
 const markets: Record<Analysis["market"], string> = {
   saturated: "Crowded market",
   healthy: "Healthy competition",
-  unexplored: "Unexplored territory",
-  unknown: "Market not established",
+  unexplored: "Limited competition",
+  unknown: "Market unknown",
 };
 const date = (value: string) =>
   new Date(value).toLocaleDateString(undefined, {
@@ -214,13 +214,13 @@ export function App() {
     document.body.dataset["dragging"] = String(windowState.dragging);
   }, [windowState]);
   const run = library?.runs.find((item) => item.status === "running");
-  const islandStatus = run ? "Thinking — validating an idea" : "Idle";
+  const islandStatus = run ? "Analysis in progress" : "Idle";
   const save = async (body: string) => {
     const idea = await api.capture({ body });
     setSelected(idea.id);
     setSection("inbox");
     setComposing(false);
-    notify("Idea captured. A little more room in your head.");
+    notify("Idea saved.");
     return idea;
   };
   const setWindow = (next: WindowMode) => {
@@ -266,7 +266,7 @@ export function App() {
           }}
           aria-label="Capture an idea"
           aria-describedby="island-status"
-          title={`${islandStatus} · Click to capture · Drag up/down · Pull inward to spring to the other edge · Alt + arrows to reposition`}
+          title={`${islandStatus} · Click to capture · Drag up/down · Pull inward to switch edges · Alt + arrows to reposition`}
         >
           <Lightbulb
             className="island-idea"
@@ -295,7 +295,7 @@ export function App() {
     return (
       <main className="fatal">
         <Mark />
-        <h1>Your ideas come first.</h1>
+        <h1>Could not load the library</h1>
         <p>{fatal}</p>
         <button onClick={() => void refresh()}>Try again</button>
       </main>
@@ -303,7 +303,7 @@ export function App() {
   if (!library)
     return (
       <main className="loading">
-        <LoaderCircle className="spin" /> Opening your idea library…
+        <LoaderCircle className="spin" /> Loading library…
       </main>
     );
   const activeProvider = providers.find(
@@ -333,11 +333,6 @@ export function App() {
           ]
         : b.createdAt.localeCompare(a.createdAt),
   );
-  const promising = library.ideas.filter(
-    (item) =>
-      item.stage !== "archive" &&
-      recommended(item, library.settings.shortlistThreshold),
-  ).length;
   const todayCount = library.ideas.filter(
     (item) =>
       new Date(item.createdAt).toDateString() === new Date().toDateString(),
@@ -375,16 +370,9 @@ export function App() {
             </div>
           </header>
           <main className="capture-main">
-            <div className="eyebrow">
-              <span className="signal" /> A PLACE FOR YOUR NEXT WHAT IF
-            </div>
-            <h1>
-              Catch the spark.
-              <br />
-              <em>Figure it out later.</em>
-            </h1>
+            <h1>New idea</h1>
             <p className="intro">
-              Big idea. Half a thought. Get it out of your head.
+              Describe the problem, target users, and proposed solution.
             </p>
             <Composer
               onSave={save}
@@ -413,9 +401,7 @@ export function App() {
                 </button>
               ))}
               {library.ideas.length === 0 && (
-                <p className="muted small-text">
-                  Your ideas will be waiting here when you’re ready.
-                </p>
+                <p className="muted small-text">No saved ideas.</p>
               )}
             </div>
           </main>
@@ -446,13 +432,13 @@ export function App() {
             >
               <Plus size={17} /> Capture an idea <kbd>⌘ N</kbd>
             </button>
-            <div className="nav-label">YOUR THINKING SPACE</div>
+            <div className="nav-label">LIBRARY</div>
             <nav aria-label="Library navigation">
               {(
                 [
                   ["inbox", Inbox, "All ideas"],
                   ["shortlist", Star, "Shortlist"],
-                  ["archive", Archive, "On the shelf"],
+                  ["archive", Archive, "Archive"],
                 ] as const
               ).map(([value, Icon, label]) => (
                 <button
@@ -475,19 +461,6 @@ export function App() {
                 </button>
               ))}
             </nav>
-            <div className="sidebar-note">
-              <span className="tiny-orbit">✳</span>
-              <p>
-                Capture freely.
-                <br />
-                Commit thoughtfully.
-              </p>
-              <span>
-                {promising
-                  ? `${promising} ${promising === 1 ? "idea looks" : "ideas look"} worth a closer look.`
-                  : "The next good idea starts with a little space."}
-              </span>
-            </div>
             <div className="sidebar-bottom">
               <button
                 className={`settings-nav ${section === "settings" ? "active" : ""}`}
@@ -500,9 +473,7 @@ export function App() {
                 <span>
                   {names[library.settings.provider]}
                   <small>
-                    {ready
-                      ? "Your account · your limits"
-                      : "Connect your subscription"}
+                    {ready ? "Account connected" : "Connect account"}
                   </small>
                 </span>
                 <ChevronDown size={13} />
@@ -512,14 +483,14 @@ export function App() {
           <div className="workspace">
             <header className="titlebar">
               <span>
-                <span className="muted">Your workspace</span>
+                <span className="muted">Workspace</span>
                 <span className="breadcrumb">/</span>
                 {section === "settings"
                   ? "Settings"
                   : section === "shortlist"
                     ? "Shortlist"
                     : section === "archive"
-                      ? "On the shelf"
+                      ? "Archive"
                       : "Ideas"}
               </span>
               <div className="actions">
@@ -575,10 +546,10 @@ export function App() {
                     <div className="list-heading">
                       <h2>
                         {section === "shortlist"
-                          ? "The contenders"
+                          ? "Shortlist"
                           : section === "archive"
-                            ? "On the shelf"
-                            : "Your ideas"}{" "}
+                            ? "Archive"
+                            : "Ideas"}{" "}
                         <span>{visible.length}</span>
                       </h2>
                       <IconButton
@@ -592,7 +563,7 @@ export function App() {
                       <Search size={15} />
                       <input
                         aria-label="Search ideas"
-                        placeholder="Find a thought…"
+                        placeholder="Search ideas…"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                       />
@@ -604,8 +575,8 @@ export function App() {
                         onChange={(e) => setSort(e.target.value)}
                       >
                         <option value="newest">Newest first</option>
-                        <option value="score">Highest opportunity</option>
-                        <option value="effort">Smallest build</option>
+                        <option value="score">Highest rating</option>
+                        <option value="effort">Lowest effort</option>
                       </select>
                       <label
                         title={`Pursue verdict and rating ≥ ${library.settings.shortlistThreshold}`}
@@ -615,7 +586,7 @@ export function App() {
                           checked={onlyPromising}
                           onChange={(e) => setOnlyPromising(e.target.checked)}
                         />{" "}
-                        Promising
+                        Recommended
                       </label>
                     </div>
                     <div className="idea-list-scroll">
@@ -647,7 +618,7 @@ export function App() {
                                 <>
                                   <span>
                                     {report.mode === "quick"
-                                      ? "First impression"
+                                      ? "Quick check"
                                       : "Researched"}
                                   </span>
                                   <span>
@@ -657,7 +628,7 @@ export function App() {
                                 </>
                               ) : (
                                 <span>
-                                  Ready when you are <ArrowRight size={12} />
+                                  Not analyzed <ArrowRight size={12} />
                                 </span>
                               )}
                             </div>
@@ -671,8 +642,8 @@ export function App() {
                             {query || onlyPromising
                               ? "No ideas match these filters."
                               : section === "shortlist"
-                                ? "Save your strongest ideas here."
-                                : "Nothing here yet."}
+                                ? "Use “Add to shortlist” to save ideas here."
+                                : "No ideas in this section."}
                           </p>
                           {(query || onlyPromising) && (
                             <button
@@ -694,28 +665,10 @@ export function App() {
                     <div
                       className={`welcome ${library.ideas.length ? "has-ideas" : ""}`}
                     >
-                      <div className="eyebrow">
-                        <span className="signal" /> ROOM TO THINK
-                      </div>
-                      <h1>
-                        {section === "archive" ? (
-                          <>
-                            Every idea has
-                            <br />
-                            <em>its own timing.</em>
-                          </>
-                        ) : (
-                          <>
-                            A small spark.
-                            <br />
-                            <em>A real possibility.</em>
-                          </>
-                        )}
-                      </h1>
+                      <h1>New idea</h1>
                       <p className="intro">
-                        A home for your SaaS ideas. Capture the rough thought,
-                        <br className="wide-only" /> find the useful angle, and
-                        see what holds up.
+                        Describe the problem, target users, and proposed
+                        solution.
                       </p>
                       <Composer
                         onSave={save}
@@ -727,35 +680,32 @@ export function App() {
                       <div className="workflow">
                         <div>
                           <span>01</span>
-                          <h3>Catch it</h3>
+                          <h3>Save an idea</h3>
                           <p>
-                            Write or dictate. It’s saved.
-                            <br />
-                            No rabbit holes required.
+                            Type or dictate, then save to your local library.
                           </p>
                         </div>
                         <div>
                           <span>02</span>
-                          <h3>Give it a glance</h3>
+                          <h3>Quick check</h3>
                           <p>
-                            A quick, honest first take.
-                            <br />A signal, not a promise.
+                            Assess scope and feasibility without web research.
                           </p>
                         </div>
                         <div>
                           <span>03</span>
-                          <h3>Follow the evidence</h3>
+                          <h3>Research</h3>
                           <p>
-                            Competitors. Gaps. A next step.
-                            <br />
-                            Research when you choose.
+                            Search for competitors, pricing, and demand
+                            evidence.
                           </p>
                         </div>
                       </div>
                       <div className="welcome-bottom">
                         <ShieldCheck size={14} />
                         <span>
-                          Local first. Your provider account. Your pace.
+                          Ideas are stored locally. Analysis uses your connected
+                          provider.
                         </span>
                       </div>
                     </div>
@@ -905,7 +855,7 @@ function Composer({
         <textarea
           id="idea-input"
           autoFocus
-          placeholder="What if there was a way to…"
+          placeholder="Describe your SaaS idea…"
           value={body}
           maxLength={8000}
           onChange={(e) => setBody(e.target.value)}
@@ -956,7 +906,7 @@ function Composer({
         <span>
           {settings.autoQuick
             ? `Quick check after saving · ${names[settings.provider]}${ready ? "" : " needs connection"}`
-            : "Just capture. Research starts when you say so."}
+            : "Saved locally. Analysis runs only when requested."}
         </span>
         {!compact && <kbd>⌘ / Ctrl ↵</kbd>}
       </div>
@@ -1055,7 +1005,7 @@ function IdeaDetail({
           </IconButton>
           <IconButton
             label={
-              idea.stage === "archive" ? "Restore to inbox" : "Put on the shelf"
+              idea.stage === "archive" ? "Restore to inbox" : "Archive idea"
             }
             onClick={() =>
               void action(() =>
@@ -1131,7 +1081,7 @@ function IdeaDetail({
               setEditing(true);
             }}
           >
-            Edit thought <FileText size={12} />
+            Edit idea <FileText size={12} />
           </button>
         </div>
       )}
@@ -1191,13 +1141,13 @@ function IdeaDetail({
         <div className="research-confirm">
           <h3>
             {confirmMode === "challenge"
-              ? "Does this idea stand up to scrutiny?"
-              : "Take a closer look?"}
+              ? "Start challenge?"
+              : "Start research?"}
           </h3>
           <p>
             {confirmMode === "challenge"
-              ? "Review the latest report for this version of your idea, verify its claims with fresh research, and look for assumptions that could change the verdict. Your idea and previous reports stay saved."
-              : "Live competition research, market signals, and a sharper MVP."}{" "}
+              ? "Review the current report, check its claims with new web research, and reassess its assumptions. Previous reports are preserved."
+              : "Research competitors and demand, then define an MVP scope."}{" "}
             Uses your {names[library.settings.provider]} account
             {library.settings.provider === "codex"
               ? ` with ${runModel(confirmMode)}`
@@ -1210,7 +1160,7 @@ function IdeaDetail({
               className="secondary"
               onClick={() => setConfirmMode(undefined)}
             >
-              Later
+              Cancel
             </button>
             <button
               className="primary"
@@ -1238,11 +1188,10 @@ function IdeaDetail({
           <span className="illustration-orbit">
             <Sparkles size={25} />
           </span>
-          <h2>A thought with room to grow.</h2>
+          <h2>No analysis yet</h2>
           <p>
-            Start with a quick check for a sharper idea, an honest first
-            impression, and a sense of the build. Research the market when
-            you’re ready.
+            Run a quick check for an initial assessment without web research, or
+            research the market for current sources and competitors.
           </p>
           <div className="check-dimensions">
             <span>
@@ -1252,7 +1201,7 @@ function IdeaDetail({
               <Check size={13} /> Feasibility
             </span>
             <span>
-              <Check size={13} /> A next step
+              <Check size={13} /> Next step
             </span>
           </div>
         </div>
@@ -1298,9 +1247,9 @@ function IdeaDetail({
           )}
           <nav className="report-tabs" aria-label="Report sections">
             {[
-              ["overview", "The verdict"],
-              ["market", "The market"],
-              ["build", "The build"],
+              ["overview", "Verdict"],
+              ["market", "Market"],
+              ["build", "Build"],
               ["names", "Names & domains"],
             ].map(([value, label]) => (
               <button
@@ -1342,31 +1291,31 @@ function IdeaDetail({
                   probability.
                 </span>
               </div>
-              <Block title="A sharper version" icon={<Sparkles size={16} />}>
+              <Block title="Refined idea" icon={<Sparkles size={16} />}>
                 <p className="refined-text">{a.improvedIdea}</p>
               </Block>
               <div className="two-columns">
-                <Block title="Who pays for this">
+                <Block title="Target buyer">
                   <p>{a.audience}</p>
                 </Block>
-                <Block title="The pain worth solving">
+                <Block title="Problem">
                   <p>{a.problem}</p>
                 </Block>
               </div>
               <div className="two-columns">
-                <Block title="What works" tone="green">
+                <Block title="Strengths" tone="green">
                   <BulletList items={a.strengths} />
                 </Block>
-                <Block title="What gives us pause" tone="amber">
+                <Block title="Risks" tone="amber">
                   <BulletList items={a.risks} />
                 </Block>
               </div>
-              <Block title="Still needs an answer">
+              <Block title="Unknowns">
                 <BulletList items={a.unknowns} />
               </Block>
               <div className="experiment">
-                <span className="eyebrow">BEFORE YOU BUILD ANYTHING</span>
-                <h3>Your next small experiment</h3>
+                <span className="eyebrow">VALIDATION</span>
+                <h3>Suggested experiment</h3>
                 <p>{a.experiment.action}</p>
                 <div>
                   <Check size={15} />
@@ -1386,7 +1335,7 @@ function IdeaDetail({
                   </p>
                 )}
               </Block>
-              <Block title={`Competitive landscape · ${a.competitors.length}`}>
+              <Block title={`Competitors · ${a.competitors.length}`}>
                 <div className="competitors">
                   {a.competitors.map((c) => (
                     <div key={c.url} className="competitor">
@@ -1413,14 +1362,14 @@ function IdeaDetail({
                 </div>
               </Block>
               <div className="two-columns">
-                <Block title="How it could earn">
+                <Block title="Monetization">
                   <p>{a.monetization}</p>
                 </Block>
-                <Block title="How people find it">
+                <Block title="Acquisition">
                   <p>{a.acquisition}</p>
                 </Block>
               </div>
-              <Block title={`Evidence trail · ${a.sources.length} sources`}>
+              <Block title={`Evidence · ${a.sources.length} sources`}>
                 <p className="small-text muted">
                   AI-selected sources support the assessment; they are not
                   independent verification of every claim.
@@ -1455,15 +1404,15 @@ function IdeaDetail({
                 <span className="eyebrow">IMPLEMENTATION EFFORT</span>
                 <h2>
                   {a.effort.level === "small"
-                    ? "Start small. Ship something useful."
+                    ? "Small implementation effort"
                     : a.effort.level === "medium"
-                      ? "Manageable, with a focused scope."
-                      : "A substantial build. Validate first."}
+                      ? "Medium implementation effort"
+                      : "Large implementation effort"}
                 </h2>
                 <Badge>{a.effort.estimate}</Badge>
                 <p>{a.effort.reasoning}</p>
               </div>
-              <Block title="The smallest useful version">
+              <Block title="MVP scope">
                 <ol className="feature-list">
                   {a.features.map((f, i) => (
                     <li key={i}>
@@ -1476,7 +1425,7 @@ function IdeaDetail({
               <Block title="Dependencies & complexity">
                 <BulletList items={a.effort.dependencies} />
               </Block>
-              <Block title="Your entry point">
+              <Block title="Differentiation">
                 <p>{a.wedge}</p>
               </Block>
               <div className="inline-notice">
@@ -1492,12 +1441,10 @@ function IdeaDetail({
         </>
       )}
       <section className="personal-notes">
-        <label htmlFor="idea-notes">
-          Your notes <span>Keep the things only you know.</span>
-        </label>
+        <label htmlFor="idea-notes">Notes</label>
         <textarea
           id="idea-notes"
-          placeholder="Customer conversations, a different angle, a reason to come back…"
+          placeholder="Customer feedback, constraints, and next steps…"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           maxLength={20000}
@@ -1576,15 +1523,15 @@ function Domains({
       .map((d) => ({
         name: d.domain.split(".")[0]!,
         domain: d.domain,
-        rationale: "Your domain idea",
+        rationale: "Custom domain",
       })),
   ];
   return (
     <div className="report-section">
-      <Block title="Give the idea a name" icon={<Sparkles size={16} />}>
+      <Block title="Suggested names" icon={<Sparkles size={16} />}>
         <p>
-          Names inspired by the problem, its promise, and a few adjacent words.
-          Suggestions are not trademark or availability checks.
+          Generated suggestions. Domain availability and trademarks have not
+          been checked.
         </p>
         <button
           className="secondary"
@@ -1660,13 +1607,13 @@ function Domains({
           void check([custom]);
         }}
       >
-        <label htmlFor="domain-input">A name of your own?</label>
+        <label htmlFor="domain-input">Check a domain</label>
         <div>
           <input
             id="domain-input"
             value={custom}
             onChange={(e) => setCustom(e.target.value)}
-            placeholder="yourlittleidea.com"
+            placeholder="example.com"
           />
           <button className="secondary" disabled={checking || !custom.trim()}>
             Check
@@ -1728,7 +1675,7 @@ function SettingsView({
   const connect = async (id: ProviderId) => {
     setConnecting(id);
     try {
-      notify("Complete sign-in in your browser. This may take a moment.");
+      notify("Complete sign-in in your browser.");
       notify(await api.connect(id));
     } catch (error) {
       notify(errorMessage(error));
@@ -1741,7 +1688,7 @@ function SettingsView({
     setDisconnecting(id);
     try {
       await api.disconnect(id);
-      notify(`${names[id]} disconnected. Your ideas and reports are saved.`);
+      notify(`${names[id]} disconnected. Ideas and reports are saved.`);
     } catch (error) {
       notify(errorMessage(error));
     } finally {
@@ -1755,20 +1702,12 @@ function SettingsView({
   return (
     <main className="settings-view">
       <div className="settings-heading">
-        <div className="eyebrow">MAKE YOURSELF AT HOME</div>
-        <h1>
-          Your tools.
-          <br />
-          <em>Your way of thinking.</em>
-        </h1>
-        <p>
-          Bring the account you already use. Keep control of when the work
-          begins.
-        </p>
+        <h1>Settings</h1>
+        <p>Configure provider accounts, analysis, and local data.</p>
       </div>
       <section className="settings-section">
         <div className="section-heading">
-          <h2>Choose your thinking partner</h2>
+          <h2>AI provider</h2>
           <button
             className="text-button"
             onClick={() => void refreshProviders()}
@@ -1902,13 +1841,13 @@ function SettingsView({
         </p>
       </section>
       <section className="settings-section">
-        <h2>A pace that works for you</h2>
+        <h2>Analysis settings</h2>
         <label className="toggle-row">
           <span>
             <strong>Quick check after capture</strong>
             <small>
-              Off by default. One short first impression; deep research always
-              needs your click.
+              Automatically run a quick check after saving. Off by default;
+              research and challenges require manual action.
             </small>
           </span>
           <input
@@ -1934,8 +1873,8 @@ function SettingsView({
             />
           </label>
           <label>
-            Promising-idea threshold{" "}
-            <span>Opportunity rating, not success probability</span>
+            Recommendation threshold{" "}
+            <span>Minimum rating for ideas marked Pursue</span>
             <input
               type="number"
               min="0"
@@ -1957,9 +1896,9 @@ function SettingsView({
         </p>
       </section>
       <section className="settings-section">
-        <h2>A little about the builder</h2>
+        <h2>Builder profile</h2>
         <p className="muted small-text">
-          Used to make the scope and implementation estimates fit you.
+          Used to estimate scope and implementation effort.
         </p>
         <label className="field">
           Your skills & constraints
@@ -2067,7 +2006,7 @@ function SettingsView({
         </button>
       </section>
       <section className="settings-section">
-        <h2>Models matched to the task</h2>
+        <h2>Models</h2>
         <p className="muted small-text">
           By default, Codex uses Luna for quick checks, Sol for research, and
           Astra when you explicitly challenge an idea. Saving an idea never
@@ -2138,12 +2077,13 @@ function SettingsView({
         ))}
       </section>
       <section className="settings-section">
-        <h2>Your ideas belong to you</h2>
+        <h2>Data & backups</h2>
         <p className="muted small-text">
-          Ideas and reports are stored locally. Only checks you start send an
-          idea and your builder profile to the selected provider. Web research
-          sends search queries; domain lookups send domain names. Backups
-          include your ideas and settings, never provider credentials.
+          Ideas and reports are stored locally. Analysis sends the idea and
+          builder profile to the selected provider, including automatic quick
+          checks when enabled. Web research sends search queries; domain lookups
+          send domain names. Backups include your ideas and settings, never
+          provider credentials.
         </p>
         <div className="actions">
           <button
@@ -2178,9 +2118,7 @@ function SettingsView({
         </div>
       </section>
       <footer className="settings-save">
-        <span>
-          {dirty ? "You have unsaved changes" : "Everything is up to date"}
-        </span>
+        <span>{dirty ? "Unsaved changes" : "Settings saved"}</span>
         <button
           className="primary"
           disabled={!dirty || saving}

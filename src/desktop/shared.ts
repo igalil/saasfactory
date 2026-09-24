@@ -28,7 +28,7 @@ export const DomainName = z
   .max(253)
   .regex(
     /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/,
-    "Enter a domain such as littleidea.com",
+    "Enter a domain such as example.com",
   );
 
 export const AnalysisSchema = z.object({

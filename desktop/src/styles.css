@@ -479,29 +479,6 @@ body[data-dragging="true"] .capture-header {
   font-variant-numeric: tabular-nums;
   color: #88977a;
 }
-.sidebar-note {
-  margin: 51px 12px 24px;
-  border-top: 1px solid #343b2d;
-  padding-top: 23px;
-}
-.tiny-orbit {
-  font-size: 28px;
-  color: #a9c27d;
-}
-.sidebar-note p {
-  font-family: var(--serif);
-  font-size: 23px;
-  line-height: 1.25;
-  letter-spacing: -0.3px;
-  color: #c9d2bd;
-  margin: 13px 0 10px;
-}
-.sidebar-note > span:last-child {
-  font-size: 10px;
-  color: #7e8973;
-  line-height: 1.6;
-  display: block;
-}
 .sidebar-bottom {
   margin-top: auto;
 }
@@ -1173,12 +1150,6 @@ body[data-dragging="true"] .capture-header {
   font-size: 11px;
   color: #bacdae;
 }
-.personal-notes label span {
-  font-size: 9px;
-  color: #6f885c;
-  display: block;
-  margin-top: 5px;
-}
 .personal-notes textarea {
   width: 100%;
   background: #1b2417;
@@ -1584,9 +1555,6 @@ body[data-dragging="true"] .capture-header {
   margin: 0 auto;
   width: 100%;
 }
-.settings-heading .eyebrow {
-  margin-bottom: 17px;
-}
 .settings-heading h1 {
   font-size: 42px;
   letter-spacing: -0.9px;
@@ -1934,12 +1902,6 @@ body[data-preview="true"][data-edge="left"] .island-stage {
     gap: 7px;
     padding: 10px 7px;
   }
-  .sidebar-note {
-    margin: 32px 6px 18px;
-  }
-  .sidebar-note p {
-    font-size: 21px;
-  }
   .settings-nav {
     font-size: 8px;
     gap: 5px;
@@ -2033,14 +1995,8 @@ body[data-preview="true"][data-edge="left"] .island-stage {
   .settings-heading h1 {
     font-size: 36px;
   }
-  .wide-only {
-    display: none;
-  }
   .workflow {
     gap: 13px;
-  }
-  .workflow p br {
-    display: none;
   }
 }
 @media (max-width: 600px) {
@@ -2057,7 +2013,6 @@ body[data-preview="true"][data-edge="left"] .island-stage {
   .sidebar > .brand > span:last-child,
   .new-idea kbd,
   .nav-label,
-  .sidebar-note,
   .sidebar nav > button > span,
   .settings-nav,
   .provider-summary > span:not(.signal),
@@ -2152,11 +2107,6 @@ body[data-preview="true"][data-edge="left"] .island-stage {
   }
 }
 
-@media (max-height: 760px) {
-  .sidebar-note {
-    display: none;
-  }
-}
 .idea-detail > h1,
 .idea-row h3,
 .original-idea p,

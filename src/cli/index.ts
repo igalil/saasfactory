@@ -734,8 +734,7 @@ Generate JSON with:
     }
 
     // Success message
-    ui.heading('Success!');
-    ui.success(`Project "${context.displayName}" created successfully!`);
+    ui.success(`Project "${context.displayName}" created.`);
 
     ui.nextSteps(context.name, [
       `cd ${context.name}`,

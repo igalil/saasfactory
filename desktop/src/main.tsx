@@ -19,11 +19,8 @@ class ErrorBoundary extends React.Component<
   override render() {
     return this.state.failed ? (
       <main className="fatal">
-        <h1>Let’s get you back.</h1>
-        <p>
-          The interface hit an error. Your saved ideas are still in your
-          library.
-        </p>
+        <h1>Interface error</h1>
+        <p>Reload to try again. Saved ideas remain in your library.</p>
         <button onClick={() => location.reload()}>Reload SaasFactory</button>
       </main>
     ) : (
