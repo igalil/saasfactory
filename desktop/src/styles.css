@@ -317,40 +317,30 @@ kbd {
 .island-stage:not([data-phase="idle"]) .island-traveler {
   will-change: transform;
 }
+/* Goo drawn in the origin wall's coordinates; mirrored when leaving the right. */
 .island-tether {
   position: absolute;
-  left: 0;
-  top: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
 .island-stage[data-from="right"] .island-tether {
-  left: auto;
-  right: 0;
   transform: scaleX(-1);
 }
 .island-tether path {
   fill: #000;
-  transform-origin: 0px 40px;
 }
-.island-stage[data-phase="flight"] .island-tether path {
-  animation: gum-break 110ms ease-out forwards;
-}
-.island-stage[data-phase="return"] .island-tether path {
-  animation: gum-break 240ms ease-out forwards;
+.island-stage[data-settled] .island-tether {
+  visibility: hidden;
 }
 .island-stage:not([data-phase="idle"]) .island-idea {
   opacity: 1;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .island-stage[data-phase="pull"] .floating-island {
-    background: none;
-    transition: none;
-  }
-}
-@keyframes gum-break {
-  to {
-    transform: scaleX(0.02) scaleY(0.4);
-    opacity: 0;
+  /* In motion the body is a rounded capsule; the goo supplies any bezel joins. */
+  .island-stage:not([data-phase="idle"]):not([data-settled]) .floating-island {
+    clip-path: inset(8px 0 round 10px);
   }
 }
 .floating-island {
@@ -381,10 +371,6 @@ body[data-edge="left"] .floating-island {
   clip-path: path(
     "M0 0 C0 4.418 3.582 8 8 8 H22 A10 10 0 0 1 32 18 V62 A10 10 0 0 1 22 72 H8 C3.582 72 0 75.582 0 80 Z"
   );
-}
-/* Detached islands have no bezel side until they land. */
-.island-stage[data-phase="flight"] .floating-island {
-  clip-path: inset(8px 0 round 10px);
 }
 .island-idea {
   width: 18px;

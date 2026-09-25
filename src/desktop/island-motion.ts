@@ -1,7 +1,7 @@
 // Shared gesture/visual tuning, in device-independent pixels and milliseconds.
 export const ISLAND_RELEASE_DISTANCE = 104;
 export const ISLAND_FLIGHT_MS = 640;
-export const ISLAND_RETURN_MS = 280;
+export const ISLAND_RETURN_MS = 360;
 /** Compact edge control. Keep in sync with the island sizes in desktop/src/styles.css. */
 export const ISLAND_WIDTH = 32;
 export const ISLAND_HEIGHT = 80;
