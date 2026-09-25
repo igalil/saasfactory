@@ -29,6 +29,7 @@ import {
 import { exportMarkdown } from "./export.js";
 import { transcribeLocally } from "./voice.js";
 import { WindowController } from "./window-controller.js";
+import { ISLAND_HEIGHT } from "./island-motion.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const renderer = path.join(root, "../renderer/index.html");
@@ -204,7 +205,7 @@ if (singleInstance)
       await service.store.recover();
       window = new BrowserWindow({
         width: 64,
-        height: 172,
+        height: ISLAND_HEIGHT,
         frame: false,
         transparent: true,
         resizable: false,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ISLAND_HEIGHT } from "./island-motion.js";
 import type { WindowMode } from "./shared.js";
 
 export const PositionSchema = z.object({
@@ -11,7 +12,7 @@ export type EdgePosition = z.infer<typeof PositionSchema>;
 export type Rectangle = { x: number; y: number; width: number; height: number };
 export const EDGE_GAP = 10;
 const sizes = {
-  island: { width: 64, height: 172 },
+  island: { width: 64, height: ISLAND_HEIGHT },
   capture: { width: 450, height: 660 },
   workspace: { width: 1180, height: 820 },
 };

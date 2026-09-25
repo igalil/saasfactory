@@ -150,7 +150,7 @@ export default WelcomeEmail;
 const main = {
   backgroundColor: '#f6f9fc',
   fontFamily:
-    '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif',
+    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", sans-serif',
 };
 
 const container = {
@@ -281,7 +281,7 @@ export default SubscriptionEmail;
 const main = {
   backgroundColor: '#f6f9fc',
   fontFamily:
-    '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif',
+    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", sans-serif',
 };
 
 const container = {
@@ -410,7 +410,7 @@ export default PasswordResetEmail;
 const main = {
   backgroundColor: '#f6f9fc',
   fontFamily:
-    '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif',
+    '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", sans-serif',
 };
 
 const container = {

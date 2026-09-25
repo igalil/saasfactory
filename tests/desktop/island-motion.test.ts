@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { BrowserWindow } from "electron";
+import { ISLAND_HEIGHT } from "../../src/desktop/island-motion.js";
 import { WindowController } from "../../src/desktop/window-controller.js";
 
 const environment = vi.hoisted(() => ({
@@ -23,7 +24,7 @@ vi.mock("electron", () => ({
 }));
 
 class FakeWindow extends EventEmitter {
-  bounds = { x: 0, y: 0, width: 64, height: 172 };
+  bounds = { x: 0, y: 0, width: 64, height: ISLAND_HEIGHT };
   webContents = Object.assign(new EventEmitter(), {
     send: vi.fn(),
     getBackgroundThrottling: () => true,
@@ -58,7 +59,10 @@ describe("sticky island gesture", () => {
       path.join(directory, "position.json"),
     );
     controller.setMode("island");
-    start = { x: window.bounds.x + 32, y: window.bounds.y + 80 };
+    start = {
+      x: window.bounds.x + 32,
+      y: window.bounds.y + ISLAND_HEIGHT / 2,
+    };
     controller.beginDrag(start);
   });
   afterEach(async () => {

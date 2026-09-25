@@ -43,7 +43,7 @@ describe("floating window placement", () => {
     });
     expect(verticalPosition(-10000, small)).toBe(0);
     expect(verticalPosition(10000, small)).toBe(1);
-    expect(windowBounds("island", small, { ...position, y: 1 }).y).toBe(268);
+    expect(windowBounds("island", small, { ...position, y: 1 }).y).toBe(360);
   });
 
   it("validates saved positions rather than restoring off-screen coordinates", () => {

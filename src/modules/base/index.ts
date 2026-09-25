@@ -456,6 +456,7 @@ async function generateGlobalsCss(projectPath: string): Promise<void> {
   }
   body {
     @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", sans-serif;
   }
 }
 `;

@@ -7,7 +7,6 @@ import {
   Archive,
   Check,
   ChevronDown,
-  Circle,
   CircleHelp,
   Compass,
   FileText,
@@ -239,6 +238,7 @@ export function App() {
         <button
           className="floating-island"
           {...drag}
+          data-state={run ? "thinking" : "idle"}
           onClick={(event) => {
             if (windowState.motion) return;
             // Keyboard and accessibility activation may have no pointer gesture.
@@ -274,17 +274,6 @@ export function App() {
             strokeWidth={1.6}
             aria-hidden="true"
           />
-          <span
-            className="island-status"
-            data-state={run ? "thinking" : "idle"}
-            aria-hidden="true"
-          >
-            {run ? (
-              <LoaderCircle size={16} className="spin" />
-            ) : (
-              <Circle size={14} strokeWidth={1.5} />
-            )}
-          </span>
         </button>
         <span id="island-status" className="sr-only" role="status">
           {islandStatus}

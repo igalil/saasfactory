@@ -85,7 +85,7 @@ async function generatePlaceholderLogo(
 
   const svg = `<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="64" height="64" rx="16" fill="url(#gradient)"/>
-  <text x="32" y="40" font-family="system-ui, -apple-system, sans-serif" font-size="24" font-weight="600" fill="white" text-anchor="middle">${initials}</text>
+  <text x="32" y="40" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', sans-serif" font-size="24" font-weight="600" fill="white" text-anchor="middle">${initials}</text>
   <defs>
     <linearGradient id="gradient" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
       <stop stop-color="#6366f1"/>
@@ -113,7 +113,7 @@ async function generateFavicon(
   // Create a simple 32x32 SVG favicon
   const faviconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="32" height="32" rx="8" fill="#6366f1"/>
-  <text x="16" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">${initials}</text>
+  <text x="16" y="22" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">${initials}</text>
 </svg>`;
 
   await fs.writeFile(path.join(projectPath, 'public', 'favicon.svg'), faviconSvg);
@@ -121,7 +121,7 @@ async function generateFavicon(
   // Create apple-touch-icon placeholder
   const appleTouchIcon = `<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="180" height="180" rx="40" fill="url(#gradient)"/>
-  <text x="90" y="110" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="600" fill="white" text-anchor="middle">${initials}</text>
+  <text x="90" y="110" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', sans-serif" font-size="72" font-weight="600" fill="white" text-anchor="middle">${initials}</text>
   <defs>
     <linearGradient id="gradient" x1="0" y1="0" x2="180" y2="180" gradientUnits="userSpaceOnUse">
       <stop stop-color="#6366f1"/>
@@ -168,17 +168,17 @@ async function generateOGImage(
   <rect x="80" y="80" width="80" height="80" rx="16" fill="white" fill-opacity="0.2"/>
 
   <!-- Title -->
-  <text x="80" y="320" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="700" fill="white">
+  <text x="80" y="320" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', sans-serif" font-size="72" font-weight="700" fill="white">
     ${context.displayName}
   </text>
 
   <!-- Tagline -->
-  <text x="80" y="400" font-family="system-ui, -apple-system, sans-serif" font-size="32" fill="white" fill-opacity="0.9">
+  <text x="80" y="400" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', sans-serif" font-size="32" fill="white" fill-opacity="0.9">
     ${tagline}
   </text>
 
   <!-- URL -->
-  <text x="80" y="550" font-family="system-ui, -apple-system, sans-serif" font-size="24" fill="white" fill-opacity="0.6">
+  <text x="80" y="550" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', sans-serif" font-size="24" fill="white" fill-opacity="0.6">
     ${context.domain ? `${context.domain}.com` : 'example.com'}
   </text>
 
@@ -210,7 +210,7 @@ async function generateProductHuntAssets(
 
   const thumbnail = `<svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="240" height="240" rx="48" fill="url(#gradient)"/>
-  <text x="120" y="145" font-family="system-ui, -apple-system, sans-serif" font-size="80" font-weight="600" fill="white" text-anchor="middle">${initials}</text>
+  <text x="120" y="145" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', sans-serif" font-size="80" font-weight="600" fill="white" text-anchor="middle">${initials}</text>
   <defs>
     <linearGradient id="gradient" x1="0" y1="0" x2="240" y2="240" gradientUnits="userSpaceOnUse">
       <stop stop-color="#6366f1"/>
@@ -244,16 +244,16 @@ async function generateProductHuntAssets(
   <text x="220" y="90" font-family="monospace" font-size="12" fill="#64748b">${context.domain || context.name}.com</text>
 
   <!-- Content area -->
-  <text x="635" y="380" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="700" fill="#1f2937" text-anchor="middle">
+  <text x="635" y="380" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', sans-serif" font-size="48" font-weight="700" fill="#1f2937" text-anchor="middle">
     ${context.displayName}
   </text>
-  <text x="635" y="440" font-family="system-ui, -apple-system, sans-serif" font-size="20" fill="#6b7280" text-anchor="middle">
+  <text x="635" y="440" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', sans-serif" font-size="20" fill="#6b7280" text-anchor="middle">
     ${tagline}
   </text>
 
   <!-- CTA Button -->
   <rect x="555" y="480" width="160" height="48" rx="8" fill="#6366f1"/>
-  <text x="635" y="512" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="600" fill="white" text-anchor="middle">Get Started</text>
+  <text x="635" y="512" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', sans-serif" font-size="16" font-weight="600" fill="white" text-anchor="middle">Get Started</text>
 </svg>`;
 
   await fs.writeFile(

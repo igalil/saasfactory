@@ -2,6 +2,7 @@ import { test, expect, _electron as electron } from "@playwright/test";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { ISLAND_HEIGHT } from "../../src/desktop/island-motion";
 
 test("macOS Dock presence survives mode changes, window close, and activation", async () => {
   test.skip(process.platform !== "darwin", "macOS Dock behavior");
@@ -82,7 +83,10 @@ test("sticky island returns from small pulls and flies past the held pointer on 
         };
       });
     const original = await geometry();
-    const point = { x: original.bounds.x + 32, y: original.bounds.y + 80 };
+    const point = {
+      x: original.bounds.x + 32,
+      y: original.bounds.y + ISLAND_HEIGHT / 2,
+    };
     const move = async (x: number, type = "pointermove") =>
       island.dispatchEvent(type, {
         pointerId: 1,
@@ -92,7 +96,7 @@ test("sticky island returns from small pulls and flies past the held pointer on 
         screenX: x,
         screenY: point.y,
       });
-    await page.mouse.move(32, 80);
+    await page.mouse.move(32, ISLAND_HEIGHT / 2);
     await page.mouse.down();
     await move(point.x - 48);
     await expect(stage).toHaveAttribute("data-phase", "pull");
@@ -104,7 +108,7 @@ test("sticky island returns from small pulls and flies past the held pointer on 
     await expect(stage).toHaveAttribute("data-phase", "idle");
     expect((await geometry()).bounds).toEqual(original.bounds);
 
-    await page.mouse.move(32, 80);
+    await page.mouse.move(32, ISLAND_HEIGHT / 2);
     await page.mouse.down();
     await move(point.x - 110); // Only a short pull; mouse is still at the original side.
     await expect(stage).toHaveAttribute("data-phase", "flight");
@@ -154,7 +158,7 @@ test("sticky island returns from small pulls and flies past the held pointer on 
       });
     });
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.mouse.move(32, 80);
+    await page.mouse.move(32, ISLAND_HEIGHT / 2);
     await page.mouse.down();
     await move(original.work.x + 42 + 110);
     await move(original.work.x + 42 + 110, "pointerup");
@@ -208,7 +212,7 @@ test("floating focus, edge dragging, immediate expansion, and saved placement", 
     // Inject off-window pointer coordinates without moving the user's OS cursor.
     // Pointer capture, IPC, geometry and persistence use the production paths.
     const dragTo = async (point: { x: number; y: number }) => {
-      await page.mouse.move(32, 80);
+      await page.mouse.move(32, ISLAND_HEIGHT / 2);
       await page.mouse.down();
       const event = {
         pointerId: 1,
@@ -241,7 +245,7 @@ test("floating focus, edge dragging, immediate expansion, and saved placement", 
     await expect(page.locator("body")).toHaveAttribute("data-edge", "left");
 
     await dragTo({ x: work.x + 32, y: work.y + work.height + 200 });
-    const bottomY = work.y + work.height - 172 - 10;
+    const bottomY = work.y + work.height - ISLAND_HEIGHT - 10;
     await expect.poll(async () => (await geometry()).bounds.y).toBe(bottomY);
     await expect(island()).toBeVisible();
 

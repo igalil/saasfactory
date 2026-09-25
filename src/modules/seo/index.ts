@@ -120,12 +120,9 @@ async function generateRootLayout(
   const description = context.content.metaDescription || context.description;
 
   const layout = `import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
 import { Providers } from '@/components/providers';
 import { JsonLd } from '@/components/shared/json-ld';
 import './globals.css';
-
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://example.com'),
@@ -198,7 +195,7 @@ export default function RootLayout({
       <head>
         <JsonLd />
       </head>
-      <body className={inter.className}>
+      <body>
         <Providers>{children}</Providers>
       </body>
     </html>
