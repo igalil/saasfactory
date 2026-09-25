@@ -20,7 +20,7 @@ bun run desktop:start
 
 For live development, use `bun run desktop:dev`. `bun run desktop:preview` is a browser-only preview: it saves captures to that browser, but cannot connect providers, transcribe, or perform domain checks.
 
-Click the black island to capture a thought. It shows a lightbulb and one status icon: a quiet ring when idle, or a spinner while validating an idea. **Cmd/Ctrl + Shift + Space** toggles capture; **Cmd/Ctrl + Enter** saves; **Escape** collapses the window. The tray menu opens the library or quits. Closing the window returns to the island. The expanded library is not always on top; the island and capture panel are.
+Click the black island to capture a thought. It shows a sprouting lightbulb and one status icon: a quiet ring when idle, or a spinner while validating an idea. **Cmd/Ctrl + Shift + Space** toggles capture; **Cmd/Ctrl + Enter** saves; **Escape** collapses the window. The tray menu opens the library or quits. Closing the window returns to the island. The expanded library is not always on top; the island and capture panel are.
 
 On macOS, SaasFactory stays in the Dock and **Command-Tab** app switcher, including when collapsed to the island. Activating it from the Dock opens quick capture.
 

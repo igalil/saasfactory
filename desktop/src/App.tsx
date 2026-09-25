@@ -13,7 +13,6 @@ import {
   FileText,
   Globe2,
   Inbox,
-  Lightbulb,
   LoaderCircle,
   Maximize2,
   Mic,
@@ -37,6 +36,7 @@ import {
 import { api, isPreview } from "./api";
 import { useWindowDrag } from "./useWindowDrag";
 import { IslandSurface } from "./IslandSurface";
+import { IdeaSprout } from "./IdeaSprout";
 import {
   currentReport,
   SettingsSchema,
@@ -268,7 +268,7 @@ export function App() {
           aria-describedby="island-status"
           title={`${islandStatus} · Click to capture · Drag up/down · Pull inward to switch edges · Alt + arrows to reposition`}
         >
-          <Lightbulb
+          <IdeaSprout
             className="island-idea"
             size={28}
             strokeWidth={1.6}
