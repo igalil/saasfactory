@@ -2,7 +2,7 @@ import { test, expect, _electron as electron } from "@playwright/test";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { ISLAND_HEIGHT } from "../../src/desktop/island-motion";
+import { ISLAND_HEIGHT, ISLAND_WIDTH } from "../../src/desktop/island-motion";
 
 test("macOS Dock presence survives mode changes, window close, and activation", async () => {
   test.skip(process.platform !== "darwin", "macOS Dock behavior");
@@ -80,11 +80,12 @@ test("sticky island returns from small pulls and flies past the held pointer on 
         return {
           bounds: window.getBounds(),
           work: screen.getDisplayMatching(window.getBounds()).workArea,
+          display: screen.getDisplayMatching(window.getBounds()).bounds,
         };
       });
     const original = await geometry();
     const point = {
-      x: original.bounds.x + 32,
+      x: original.bounds.x + ISLAND_WIDTH / 2,
       y: original.bounds.y + ISLAND_HEIGHT / 2,
     };
     const move = async (x: number, type = "pointermove") =>
@@ -96,19 +97,19 @@ test("sticky island returns from small pulls and flies past the held pointer on 
         screenX: x,
         screenY: point.y,
       });
-    await page.mouse.move(32, ISLAND_HEIGHT / 2);
+    await page.mouse.move(ISLAND_WIDTH / 2, ISLAND_HEIGHT / 2);
     await page.mouse.down();
     await move(point.x - 48);
     await expect(stage).toHaveAttribute("data-phase", "pull");
     await expect(page.getByText("Pull to switch sides")).toHaveCount(0);
-    expect((await geometry()).bounds.width).toBe(original.work.width - 20);
+    expect((await geometry()).bounds.width).toBe(original.display.width);
     await page.screenshot({ path: "test-results/island-sticky-pull.png" });
     await move(point.x - 48, "pointerup");
     await page.mouse.up();
     await expect(stage).toHaveAttribute("data-phase", "idle");
     expect((await geometry()).bounds).toEqual(original.bounds);
 
-    await page.mouse.move(32, ISLAND_HEIGHT / 2);
+    await page.mouse.move(ISLAND_WIDTH / 2, ISLAND_HEIGHT / 2);
     await page.mouse.down();
     await move(point.x - 110); // Only a short pull; mouse is still at the original side.
     await expect(stage).toHaveAttribute("data-phase", "flight");
@@ -133,9 +134,41 @@ test("sticky island returns from small pulls and flies past the held pointer on 
       );
     });
     const airborne = await island.boundingBox();
-    expect(airborne!.x).toBeLessThan(original.work.width * 0.7);
-    expect(airborne!.x).toBeGreaterThan(64);
-    await page.screenshot({ path: "test-results/island-sticky-flight.png" });
+    expect(airborne!.x).toBeLessThan(original.display.width * 0.7);
+    expect(airborne!.x).toBeGreaterThan(ISLAND_WIDTH);
+    const flightShape = await island.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const inside = (x: number, y: number) =>
+        element.contains(
+          document.elementFromPoint(
+            bounds.x + bounds.width * x,
+            bounds.y + bounds.height * y,
+          ),
+        );
+      return {
+        // All four detached corners must be cut away symmetrically.
+        corners: [
+          inside(0.03, 0.12),
+          inside(0.97, 0.12),
+          inside(0.03, 0.88),
+          inside(0.97, 0.88),
+        ],
+        edges: [
+          inside(0.5, 0.12),
+          inside(0.5, 0.88),
+          inside(0.03, 0.5),
+          inside(0.97, 0.5),
+        ],
+      };
+    });
+    expect(flightShape).toEqual({
+      corners: [false, false, false, false],
+      edges: [true, true, true, true],
+    });
+    await page.screenshot({
+      path: "test-results/island-sticky-flight.png",
+      omitBackground: true,
+    });
     await page
       .locator(".island-traveler")
       .evaluate((element) => element.getAnimations()[0]!.play());
@@ -143,8 +176,8 @@ test("sticky island returns from small pulls and flies past the held pointer on 
     await expect(stage).toHaveAttribute("data-phase", "idle");
     await page.mouse.up();
     expect((await geometry()).bounds).toMatchObject({
-      x: original.work.x + 10,
-      width: 64,
+      x: original.display.x,
+      width: ISLAND_WIDTH,
       y: original.bounds.y,
     });
     await expect(island).toBeVisible();
@@ -158,10 +191,10 @@ test("sticky island returns from small pulls and flies past the held pointer on 
       });
     });
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.mouse.move(32, ISLAND_HEIGHT / 2);
+    await page.mouse.move(ISLAND_WIDTH / 2, ISLAND_HEIGHT / 2);
     await page.mouse.down();
-    await move(original.work.x + 42 + 110);
-    await move(original.work.x + 42 + 110, "pointerup");
+    await move(original.display.x + ISLAND_WIDTH / 2 + 110);
+    await move(original.display.x + ISLAND_WIDTH / 2 + 110, "pointerup");
     await page.mouse.up();
     await expect(stage).toHaveAttribute("data-phase", "idle");
     expect((await geometry()).bounds).toEqual(original.bounds);
@@ -196,6 +229,7 @@ test("floating focus, edge dragging, immediate expansion, and saved placement", 
         return {
           bounds: window.getBounds(),
           work: screen.getDisplayMatching(window.getBounds()).workArea,
+          display: screen.getDisplayMatching(window.getBounds()).bounds,
         };
       });
     await expect(island()).toBeVisible();
@@ -203,16 +237,17 @@ test("floating focus, edge dragging, immediate expansion, and saved placement", 
       app.focus({ steal: true });
       BrowserWindow.getAllWindows()[0]!.focus();
     });
-    await expect(island()).toHaveCSS("opacity", "1");
+    await expect(page.locator(".island-idea")).toHaveCSS("opacity", "1");
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()[0]!.blur(),
     );
-    await expect(island()).toHaveCSS("opacity", "0.6");
+    await expect(page.locator(".island-idea")).toHaveCSS("opacity", "0.6");
+    await expect(island()).toHaveCSS("opacity", "1");
 
     // Inject off-window pointer coordinates without moving the user's OS cursor.
     // Pointer capture, IPC, geometry and persistence use the production paths.
     const dragTo = async (point: { x: number; y: number }) => {
-      await page.mouse.move(32, ISLAND_HEIGHT / 2);
+      await page.mouse.move(ISLAND_WIDTH / 2, ISLAND_HEIGHT / 2);
       await page.mouse.down();
       const event = {
         pointerId: 1,
@@ -229,11 +264,9 @@ test("floating focus, edge dragging, immediate expansion, and saved placement", 
         "idle",
       );
     };
-    const { work } = await geometry();
-    await dragTo({ x: work.x + 32, y: work.y - 200 });
-    await expect
-      .poll(async () => (await geometry()).bounds.x)
-      .toBe(work.x + 10);
+    const { work, display } = await geometry();
+    await dragTo({ x: work.x + ISLAND_WIDTH / 2, y: work.y - 200 });
+    await expect.poll(async () => (await geometry()).bounds.x).toBe(display.x);
     await expect
       .poll(async () => (await geometry()).bounds.y)
       .toBe(work.y + 10);
@@ -244,7 +277,10 @@ test("floating focus, edge dragging, immediate expansion, and saved placement", 
     );
     await expect(page.locator("body")).toHaveAttribute("data-edge", "left");
 
-    await dragTo({ x: work.x + 32, y: work.y + work.height + 200 });
+    await dragTo({
+      x: work.x + ISLAND_WIDTH / 2,
+      y: work.y + work.height + 200,
+    });
     const bottomY = work.y + work.height - ISLAND_HEIGHT - 10;
     await expect.poll(async () => (await geometry()).bounds.y).toBe(bottomY);
     await expect(island()).toBeVisible();
@@ -264,11 +300,32 @@ test("floating focus, edge dragging, immediate expansion, and saved placement", 
       page.getByRole("textbox", { name: "Your SaaS idea", exact: true }),
     ).toBeVisible();
     await expect(page.locator(".mode-capture")).toHaveCSS("opacity", "1");
+    const bezelJoins = await page
+      .locator(".mode-capture")
+      .evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const inside = (x: number, y: number) =>
+          element.contains(
+            document.elementFromPoint(bounds.x + x, bounds.y + y),
+          );
+        return {
+          top: inside(0.5, 8),
+          bottom: inside(0.5, bounds.height - 8),
+          abovePanel: inside(20, 8),
+          belowPanel: inside(20, bounds.height - 8),
+        };
+      });
+    expect(bezelJoins).toEqual({
+      top: true,
+      bottom: true,
+      abovePanel: false,
+      belowPanel: false,
+    });
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()[0]!.blur(),
     );
     await expect(page.locator(".mode-capture")).toHaveCSS("opacity", "0.8");
-    expect((await geometry()).bounds.x).toBe(work.x + 10);
+    expect((await geometry()).bounds.x).toBe(display.x);
     await page
       .getByRole("button", { name: "Collapse to island", exact: true })
       .click();
@@ -285,14 +342,14 @@ test("floating focus, edge dragging, immediate expansion, and saved placement", 
     page = await app.firstWindow();
     await expect(island()).toBeVisible();
     expect((await geometry()).bounds).toMatchObject({
-      x: work.x + 10,
+      x: display.x,
       y: bottomY,
     });
     await island().focus();
     await page.keyboard.press("Alt+ArrowRight");
     await expect
       .poll(async () => (await geometry()).bounds.x)
-      .toBe(work.x + work.width - 64 - 10);
+      .toBe(display.x + display.width - ISLAND_WIDTH);
     await page.keyboard.press("Alt+ArrowUp");
     await expect
       .poll(async () => (await geometry()).bounds.y)
@@ -334,12 +391,13 @@ test("native island, preload bridge, durable capture, provider guard, and restar
       return {
         bounds: window.getBounds(),
         work: screen.getDisplayMatching(window.getBounds()).workArea,
+        display: screen.getDisplayMatching(window.getBounds()).bounds,
         alwaysOnTop: window.isAlwaysOnTop(),
       };
     });
-    expect(geometry.bounds.width).toBe(64);
+    expect(geometry.bounds.width).toBe(ISLAND_WIDTH);
     expect(geometry.bounds.x + geometry.bounds.width).toBe(
-      geometry.work.x + geometry.work.width - 10,
+      geometry.display.x + geometry.display.width,
     );
     expect(geometry.alwaysOnTop).toBe(true);
     await page

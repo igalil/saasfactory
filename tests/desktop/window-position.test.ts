@@ -12,13 +12,43 @@ describe("floating window placement", () => {
   it("anchors either edge on displays with negative origins", () => {
     const left = windowBounds("island", work, position);
     const right = windowBounds("capture", work, { ...position, edge: "right" });
-    expect(left.x).toBe(-1910);
-    expect(right.x + right.width).toBe(-10);
+    expect(left.x).toBe(-1920);
+    expect(right.x + right.width).toBe(0);
     expect(verticalPosition(left.y + left.height / 2, work)).toBeCloseTo(
       0.25,
       2,
     );
   });
+
+  it.each(["left", "right"] as const)(
+    "touches the physical %s edge when the Dock reduces the work area",
+    (edge) => {
+      const display = { x: -1920, y: 0, width: 1920, height: 1080 };
+      const insetWork = { x: -1850, y: 38, width: 1780, height: 1042 };
+      for (const mode of ["island", "capture"] as const) {
+        const bounds = windowBounds(
+          mode,
+          insetWork,
+          { ...position, edge },
+          display,
+        );
+        expect(edge === "left" ? bounds.x : bounds.x + bounds.width).toBe(
+          edge === "left" ? -1920 : 0,
+        );
+        expect(bounds.y).toBeGreaterThanOrEqual(insetWork.y + 10);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(1070);
+      }
+      const library = windowBounds(
+        "workspace",
+        insetWork,
+        { ...position, edge },
+        display,
+      );
+      expect(edge === "left" ? library.x : library.x + library.width).toBe(
+        edge === "left" ? -1840 : -80,
+      );
+    },
+  );
 
   it.each([0, 0.5, 1])(
     "keeps all modes inside the work area at vertical position %s",

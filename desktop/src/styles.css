@@ -309,7 +309,7 @@ kbd {
   position: absolute;
   left: 0;
   top: 0;
-  width: 64px;
+  width: 32px;
   height: 80px;
   transform-origin: center;
   z-index: 2;
@@ -329,9 +329,7 @@ kbd {
   transform: scaleX(-1);
 }
 .island-tether path {
-  fill: url(#gum-fill);
-  stroke: #5d6b47;
-  stroke-width: 1;
+  fill: #000;
   transform-origin: 0px 40px;
 }
 .island-stage[data-phase="flight"] .island-tether path {
@@ -340,14 +338,12 @@ kbd {
 .island-stage[data-phase="return"] .island-tether path {
   animation: gum-break 240ms ease-out forwards;
 }
-.island-stage:not([data-phase="idle"]) .floating-island {
+.island-stage:not([data-phase="idle"]) .island-idea {
   opacity: 1;
 }
 @media (prefers-reduced-motion: no-preference) {
   .island-stage[data-phase="pull"] .floating-island {
     background: none;
-    border-color: transparent;
-    box-shadow: none;
     transition: none;
   }
 }
@@ -361,29 +357,43 @@ kbd {
   position: absolute;
   right: 0;
   top: 0;
-  width: 64px;
+  width: 32px;
   height: 80px;
-  border-radius: 30px 15px 15px 30px;
+  /* Concave quarter-circle shoulders flare outward into the bezel. */
+  clip-path: path(
+    "M32 0 C32 4.418 28.418 8 24 8 H10 A10 10 0 0 0 0 18 V62 A10 10 0 0 0 10 72 H24 C28.418 72 32 75.582 32 80 Z"
+  );
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0;
-  background: linear-gradient(120deg, #161915, #090b09);
-  border: 1px solid #353a30;
-  box-shadow: inset 0 1px 1px #ffffff10;
+  background: #000;
+  border: 0;
+  outline: none;
+  box-shadow: none;
   color: #e3e9da;
   cursor: grab;
   touch-action: none;
   user-select: none;
-  transition:
-    opacity 160ms ease,
-    border-color 160ms ease;
 }
 body[data-edge="left"] .floating-island {
-  border-radius: 15px 30px 30px 15px;
+  clip-path: path(
+    "M0 0 C0 4.418 3.582 8 8 8 H22 A10 10 0 0 1 32 18 V62 A10 10 0 0 1 22 72 H8 C3.582 72 0 75.582 0 80 Z"
+  );
 }
-body[data-focused="false"] .floating-island {
+/* Detached islands have no bezel side until they land. */
+.island-stage[data-phase="flight"] .floating-island {
+  clip-path: inset(8px 0 round 10px);
+}
+.island-idea {
+  width: 18px;
+  height: 18px;
+  transition:
+    opacity 160ms ease,
+    color 160ms ease;
+}
+body[data-focused="false"] .island-idea {
   opacity: 0.6;
 }
 body[data-focused="false"] .mode-capture {
@@ -393,14 +403,21 @@ body[data-dragging="true"] .floating-island,
 body[data-dragging="true"] .capture-header {
   cursor: grabbing;
 }
-.floating-island:hover {
-  border-color: #349f8c;
-}
 .floating-island[data-state="idle"] .island-idea {
-  color: var(--muted);
+  color: #a1a1a1;
 }
 .floating-island[data-state="thinking"] .island-idea {
   color: var(--accent);
+}
+.floating-island:hover .island-idea,
+.floating-island:focus-visible .island-idea {
+  color: #fff;
+}
+.floating-island:focus-visible {
+  outline: none;
+}
+.floating-island:focus-visible .island-idea {
+  stroke-width: 2;
 }
 .sidebar {
   min-height: 0;
@@ -1397,9 +1414,37 @@ body[data-dragging="true"] .capture-header {
 }
 .mode-capture {
   flex-direction: column;
-  border-radius: 24px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding-block: 16px;
   background: linear-gradient(130deg, #161b13, #0e120c);
+  /* Responsive outline: concave bezel joins and rounded screen-facing corners. */
+  clip-path: shape(
+    from 100% 0,
+    curve to calc(100% - 16px) 16px with 100% 8.836px / calc(100% - 7.164px) 16px,
+    hline to 24px,
+    curve to 0 40px with 10.745px 16px / 0 26.745px,
+    vline to calc(100% - 40px),
+    curve to 24px calc(100% - 16px) with 0 calc(100% - 26.745px) / 10.745px calc(100% - 16px),
+    hline to calc(100% - 16px),
+    curve to 100% 100% with calc(100% - 7.164px) calc(100% - 16px) / 100% calc(100% - 8.836px),
+    close
+  );
   transition: opacity 160ms ease;
+}
+body[data-edge="left"] .mode-capture {
+  clip-path: shape(
+    from 0 0,
+    curve to 16px 16px with 0 8.836px / 7.164px 16px,
+    hline to calc(100% - 24px),
+    curve to 100% 40px with calc(100% - 10.745px) 16px / 100% 26.745px,
+    vline to calc(100% - 40px),
+    curve to calc(100% - 24px) calc(100% - 16px) with 100% calc(100% - 26.745px) / calc(100% - 10.745px) calc(100% - 16px),
+    hline to 16px,
+    curve to 0 100% with 7.164px calc(100% - 16px) / 0 calc(100% - 8.836px),
+    close
+  );
 }
 .capture-header {
   display: flex;
@@ -1762,12 +1807,12 @@ body[data-preview="true"][data-mode="capture"] .app-shell {
 }
 body[data-preview="true"] .island-stage {
   position: fixed;
-  width: 64px;
+  width: 32px;
   top: calc(50vh - 40px);
-  right: 12px;
+  right: 0;
 }
 body[data-preview="true"][data-edge="left"] .island-stage {
-  left: 12px;
+  left: 0;
   right: auto;
 }
 @keyframes spin {

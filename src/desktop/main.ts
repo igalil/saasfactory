@@ -29,7 +29,7 @@ import {
 import { exportMarkdown } from "./export.js";
 import { transcribeLocally } from "./voice.js";
 import { WindowController } from "./window-controller.js";
-import { ISLAND_HEIGHT } from "./island-motion.js";
+import { ISLAND_HEIGHT, ISLAND_WIDTH } from "./island-motion.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const renderer = path.join(root, "../renderer/index.html");
@@ -204,10 +204,12 @@ if (singleInstance)
       );
       await service.store.recover();
       window = new BrowserWindow({
-        width: 64,
+        width: ISLAND_WIDTH,
         height: ISLAND_HEIGHT,
         frame: false,
         transparent: true,
+        // Let the renderer draw concave bezel joins without native corner clipping.
+        roundedCorners: false,
         resizable: false,
         hasShadow: false,
         show: false,

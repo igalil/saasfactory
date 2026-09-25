@@ -4,12 +4,19 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { BrowserWindow } from "electron";
-import { ISLAND_HEIGHT } from "../../src/desktop/island-motion.js";
+import {
+  ISLAND_HEIGHT,
+  ISLAND_WIDTH,
+} from "../../src/desktop/island-motion.js";
 import { WindowController } from "../../src/desktop/window-controller.js";
 
 const environment = vi.hoisted(() => ({
   reduced: false,
-  display: { id: 1, workArea: { x: 0, y: 30, width: 1440, height: 850 } },
+  display: {
+    id: 1,
+    bounds: { x: 0, y: 0, width: 1440, height: 900 },
+    workArea: { x: 0, y: 30, width: 1440, height: 850 },
+  },
 }));
 vi.mock("electron", () => ({
   screen: {
@@ -24,7 +31,7 @@ vi.mock("electron", () => ({
 }));
 
 class FakeWindow extends EventEmitter {
-  bounds = { x: 0, y: 0, width: 64, height: ISLAND_HEIGHT };
+  bounds = { x: 0, y: 0, width: ISLAND_WIDTH, height: ISLAND_HEIGHT };
   webContents = Object.assign(new EventEmitter(), {
     send: vi.fn(),
     getBackgroundThrottling: () => true,
@@ -60,7 +67,7 @@ describe("sticky island gesture", () => {
     );
     controller.setMode("island");
     start = {
-      x: window.bounds.x + 32,
+      x: window.bounds.x + ISLAND_WIDTH / 2,
       y: window.bounds.y + ISLAND_HEIGHT / 2,
     };
     controller.beginDrag(start);
@@ -79,11 +86,14 @@ describe("sticky island gesture", () => {
       edge: "right",
       motion: { phase: "pull" },
     });
-    expect(window.bounds.width).toBe(1420);
+    expect(window.bounds).toMatchObject({ x: 0, width: 1440 });
     expect(controller.endDrag({ x: start.x - 48, y: start.y })).toBe(true);
     expect(controller.state().motion?.phase).toBe("return");
     controller.finishMotion(controller.state().motion!.id);
-    expect(window.bounds).toMatchObject({ x: 1366, width: 64 });
+    expect(window.bounds).toMatchObject({
+      x: 1440 - ISLAND_WIDTH,
+      width: ISLAND_WIDTH,
+    });
     expect(controller.state().motion).toBeNull();
     await controller.flush();
     expect(
@@ -106,7 +116,7 @@ describe("sticky island gesture", () => {
     controller.finishMotion(motion.id + 1); // Stale animation acknowledgments are ignored.
     expect(controller.state().motion).toEqual(motion);
     controller.finishMotion(motion.id);
-    expect(window.bounds).toMatchObject({ x: 10, width: 64 });
+    expect(window.bounds).toMatchObject({ x: 0, width: ISLAND_WIDTH });
     expect(window.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
     expect(window.webContents.setBackgroundThrottling).toHaveBeenLastCalledWith(
       true,
@@ -115,14 +125,14 @@ describe("sticky island gesture", () => {
 
   it("switches from the left using the same small inward pull", () => {
     controller.nudge("left");
-    controller.beginDrag({ x: 42, y: start.y });
-    controller.moveDrag({ x: 146, y: start.y });
+    controller.beginDrag({ x: ISLAND_WIDTH / 2, y: start.y });
+    controller.moveDrag({ x: ISLAND_WIDTH / 2 + 104, y: start.y });
     expect(controller.state()).toMatchObject({
       edge: "right",
       motion: { phase: "flight", from: "left" },
     });
     controller.finishMotion(controller.state().motion!.id);
-    expect(window.bounds.x).toBe(1366);
+    expect(window.bounds.x).toBe(1440 - ISLAND_WIDTH);
   });
 
   it("keeps vertical dragging and tiny click jitter out of the slingshot", () => {
@@ -131,7 +141,7 @@ describe("sticky island gesture", () => {
     controller.beginDrag(start);
     controller.moveDrag({ x: start.x - 16, y: start.y + 130 });
     expect(controller.state().motion).toBeNull();
-    expect(window.bounds.width).toBe(64);
+    expect(window.bounds.width).toBe(ISLAND_WIDTH);
     expect(window.bounds.y).toBeGreaterThan(start.y);
   });
 
@@ -140,17 +150,17 @@ describe("sticky island gesture", () => {
     environment.reduced = true;
     controller.beginDrag(start);
     pull(48);
-    expect(window.bounds.width).toBe(64);
+    expect(window.bounds.width).toBe(ISLAND_WIDTH);
     pull(104);
     expect(controller.state()).toMatchObject({ edge: "left", motion: null });
-    expect(window.bounds).toMatchObject({ x: 10, width: 64 });
+    expect(window.bounds).toMatchObject({ x: 0, width: ISLAND_WIDTH });
   });
 
   it("recovers narrow interactive bounds if the renderer never finishes its animation", () => {
     pull(104);
     vi.advanceTimersByTime(1300);
     expect(controller.state().motion).toBeNull();
-    expect(window.bounds).toMatchObject({ x: 10, width: 64 });
+    expect(window.bounds).toMatchObject({ x: 0, width: ISLAND_WIDTH });
     expect(window.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
   });
 
@@ -158,7 +168,7 @@ describe("sticky island gesture", () => {
     pull(48);
     window.emit("blur");
     expect(controller.state().motion).toBeNull();
-    expect(window.bounds.width).toBe(64);
+    expect(window.bounds.width).toBe(ISLAND_WIDTH);
     controller.beginDrag(start);
     pull(104);
     const id = controller.state().motion!.id;

@@ -2,7 +2,8 @@
 export const ISLAND_RELEASE_DISTANCE = 104;
 export const ISLAND_FLIGHT_MS = 640;
 export const ISLAND_RETURN_MS = 280;
-/** Compact edge control. Keep in sync with the island heights in desktop/src/styles.css. */
+/** Compact edge control. Keep in sync with the island sizes in desktop/src/styles.css. */
+export const ISLAND_WIDTH = 32;
 export const ISLAND_HEIGHT = 80;
 
 export function inwardPull(edge: "left" | "right", startX: number, x: number) {

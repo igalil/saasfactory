@@ -4,6 +4,7 @@ import type { WindowState } from "../../src/desktop/shared";
 import {
   ISLAND_FLIGHT_MS,
   ISLAND_HEIGHT,
+  ISLAND_WIDTH,
   ISLAND_RETURN_MS,
   rubberOffset,
 } from "../../src/desktop/island-motion";
@@ -25,49 +26,43 @@ export function IslandSurface({
   const direction = from === "left" ? 1 : -1;
   const pull = motion?.pull ?? 0;
   const offset = rubberOffset(pull);
-  const tip = offset + 16;
-  const neck = islandY(67) + pull * islandY(14);
-  const neckMirror = ISLAND_HEIGHT - neck;
+  const tip = offset + ISLAND_WIDTH / 4;
   const scaleX = 1 + pull * 0.22;
   const scaleY = 1 - pull * 0.07;
-  // Match the traveler's scaled border box, drawing the attachment and body as
-  // one silhouette so there is no internal border or mismatched fill at the join.
-  const left = offset + 32 - 31.5 * scaleX;
-  const right = offset + 32 + 31.5 * scaleX;
+  // Match the CSS notch, keeping the stretched bezel join and body one silhouette.
+  const left = offset + (ISLAND_WIDTH / 2) * (1 - scaleX);
+  const right = offset + (ISLAND_WIDTH / 2) * (1 + scaleX);
   const center = ISLAND_HEIGHT / 2;
-  const half = (center - 0.5) * scaleY;
+  const half = (center - 8) * scaleY;
   const top = center - half;
   const bottom = center + half;
-  const innerX = 14.5 * scaleX;
-  const innerY = 14.5 * scaleY;
-  const outerX = 29.5 * scaleX;
-  const outerY = 29.5 * scaleY;
-  const joinCurve = islandY(16);
-  const joinTop = top + islandY(42) * scaleY;
-  const joinBottom = bottom - islandY(42) * scaleY;
-  const mouthTop = islandY(45);
+  const shoulder = 8 * scaleX;
+  const outerX = 10 * scaleX;
+  const outerY = 10 * scaleY;
+  const neck = top + (center - top - 3) * pull;
+  const neckMirror = ISLAND_HEIGHT - neck;
+  const mouthTop = islandY(45) * pull;
   const mouthBottom = ISLAND_HEIGHT - mouthTop;
-  const mouthCpTop = islandY(49);
+  // Cubic quarter-circle handles match the outward shoulders of the idle notch.
+  const cornerControl = 0.55228475;
+  const mouthCpTop = mouthTop + (neck - mouthTop) * cornerControl;
   const mouthCpBottom = ISLAND_HEIGHT - mouthCpTop;
+  const neckControlX = left * 0.3 + shoulder * (1 - cornerControl);
   const attachTop = islandY(32);
   const attachBottom = ISLAND_HEIGHT - attachTop;
   const attachCpTop = islandY(38);
   const attachCpBottom = ISLAND_HEIGHT - attachCpTop;
   const connectedPath = `
     M 0 ${mouthTop}
-    C ${left * 0.25} ${mouthCpTop} ${left * 0.3} ${neck} ${left * 0.55} ${neck}
-    C ${left * 0.82} ${neck} ${left} ${joinTop + joinCurve} ${left} ${joinTop}
-    V ${top + innerY}
-    A ${innerX} ${innerY} 0 0 1 ${left + innerX} ${top}
+    C 0 ${mouthCpTop} ${neckControlX} ${neck} ${left * 0.55 + shoulder} ${neck}
+    C ${left * 0.82 + shoulder} ${neck} ${left + shoulder} ${top} ${left + shoulder} ${top}
     H ${right - outerX}
     A ${outerX} ${outerY} 0 0 1 ${right} ${top + outerY}
     V ${bottom - outerY}
     A ${outerX} ${outerY} 0 0 1 ${right - outerX} ${bottom}
-    H ${left + innerX}
-    A ${innerX} ${innerY} 0 0 1 ${left} ${bottom - innerY}
-    V ${joinBottom}
-    C ${left} ${joinBottom - joinCurve} ${left * 0.82} ${neckMirror} ${left * 0.55} ${neckMirror}
-    C ${left * 0.3} ${neckMirror} ${left * 0.25} ${mouthCpBottom} 0 ${mouthBottom} Z
+    H ${left + shoulder}
+    C ${left + shoulder} ${bottom} ${left * 0.82 + shoulder} ${neckMirror} ${left * 0.55 + shoulder} ${neckMirror}
+    C ${neckControlX} ${neckMirror} 0 ${mouthCpBottom} 0 ${mouthBottom} Z
   `;
 
   useLayoutEffect(() => {
@@ -86,13 +81,13 @@ export function IslandSurface({
       // The IPC message and native resize can reach Chromium in adjacent frames.
       // Wait for the strip's final viewport before measuring the flight distance.
       const width = stage.current.clientWidth;
-      if (width <= 64) {
+      if (width <= ISLAND_WIDTH) {
         frame = requestAnimationFrame(start);
         return;
       }
-      const origin = motion.from === "left" ? 0 : width - 64;
+      const origin = motion.from === "left" ? 0 : width - ISLAND_WIDTH;
       const sign = motion.from === "left" ? 1 : -1;
-      const target = motion.from === "left" ? width - 64 : 0;
+      const target = motion.from === "left" ? width - ISLAND_WIDTH : 0;
       const x = origin + sign * rubberOffset(motion.pull);
       const transform = (at: number, sx = 1, sy = 1) =>
         `translate3d(${at - origin}px, 0, 0) scale(${sx}, ${sy})`;
@@ -142,10 +137,10 @@ export function IslandSurface({
         .then(() => {
           if (!traveler.current) return;
           // Keep the final pose responsive while the native strip shrinks back to
-          // 64px, so its last frame cannot jump off-screen during the IPC handoff.
+          // its idle width, so the last frame cannot jump during the IPC handoff.
           traveler.current.style.transform =
             motion.phase === "flight"
-              ? `translate3d(calc(${sign} * (100vw - 64px)), 0, 0)`
+              ? `translate3d(calc(${sign} * (100vw - ${ISLAND_WIDTH}px)), 0, 0)`
               : "none";
           animation?.cancel();
           finish();
@@ -174,12 +169,6 @@ export function IslandSurface({
           viewBox={`0 0 148 ${ISLAND_HEIGHT}`}
           aria-hidden="true"
         >
-          <defs>
-            <linearGradient id="gum-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop stopColor="#1a1e17" />
-              <stop offset="1" stopColor="#090b09" />
-            </linearGradient>
-          </defs>
           <path
             d={
               motion.phase === "pull"
@@ -195,7 +184,7 @@ export function IslandSurface({
         style={
           motion
             ? {
-                left: from === "left" ? 0 : "calc(100% - 64px)",
+                left: from === "left" ? 0 : `calc(100% - ${ISLAND_WIDTH}px)`,
                 transform: `translate3d(${direction * offset}px, 0, 0) scale(${scaleX}, ${scaleY})`,
               }
             : undefined

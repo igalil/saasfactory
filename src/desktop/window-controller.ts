@@ -98,7 +98,12 @@ export class WindowController {
     this.position.displayId = display.id;
     // Native animated resizing reflows React through many intermediate widths.
     // Apply final geometry immediately so the new layout never stretches/squeezes.
-    const bounds = windowBounds(this.mode, display.workArea, this.position);
+    const bounds = windowBounds(
+      this.mode,
+      display.workArea,
+      this.position,
+      display.bounds,
+    );
     if (this.motion && this.mode === "island") {
       if (this.previousThrottling === undefined) {
         this.previousThrottling =
@@ -107,8 +112,8 @@ export class WindowController {
       }
       // A short-lived transparent strip gives the compositor room for the tether
       // and flight. Native bounds stay fixed throughout the cross-screen animation.
-      bounds.x = display.workArea.x + 10;
-      bounds.width = Math.max(64, display.workArea.width - 20);
+      bounds.x = display.bounds.x;
+      bounds.width = display.bounds.width;
     }
     const previous = this.window.getBounds();
     if (
